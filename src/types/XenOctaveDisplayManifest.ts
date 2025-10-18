@@ -55,4 +55,6 @@ export type KeyDeclaration = {
 export default interface XenOctaveDisplayManifest {
     keyClasses: Array<KeyClass>
     keyDeclarations: Array<KeyDeclaration>
+    totalEDO: number
+    C4Frequency: number
 }

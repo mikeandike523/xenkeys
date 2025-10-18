@@ -1,5 +1,6 @@
 import type XenOctaveDisplayManifest from "../../types/XenOctaveDisplayManifest";
 import type { KeyClass, KeyDeclaration } from "../../types/XenOctaveDisplayManifest";
+import getBaseFrequencyC from "../../utils/music-theory/getBaseFrequency";
 
 
 const keyDeclarations: Array<KeyDeclaration> = [
@@ -107,5 +108,7 @@ export function make24EDO(
     return {
         keyClasses,
         keyDeclarations,
+        totalEDO: 24,
+        C4Frequency: getBaseFrequencyC(440,24,4,6)
     }
 }
