@@ -1,9 +1,10 @@
 import { Div, type DivProps } from "style-props-html";
 import { forwardRef } from "react";
+import { css } from "@emotion/react";
 
 import type XenOctaveDisplayManifest from "../types/XenOctaveDisplayManifest";
 import lastIndexOfNonzeroValue from "../utils/algorithms/lastIndexOfNonzeroValue";
-import { css } from "@emotion/react";
+import iota from "../utils/algorithms/iota";
 
 export interface XenKeyboardProps extends DivProps {
   // Make width required
@@ -56,17 +57,19 @@ export default forwardRef<HTMLDivElement, XenKeyboardProps>(
       >
         {manifest.keyDeclarations.map((keyDeclaration) => {
           const reactKey = `key-start-${keyDeclaration.microStepOffset}`;
-          const keyClassIndex = lastIndexOfNonzeroValue(keyDeclaration.offsets) ?? 0
+          const keyClassIndex =
+            lastIndexOfNonzeroValue(keyDeclaration.offsets) ?? 0;
           const keyClass = manifest.keyClasses[keyClassIndex];
           let leftValue = keyDeclaration.offsets[0] * keyWidths[0];
           for (let i = 1; i < keyDeclaration.offsets.length; i++) {
-            if(keyDeclaration.offsets[i] < 1){
-                continue
+            if (keyDeclaration.offsets[i] < 1) {
+              continue;
             }
             const priorKeyWidth = keyWidths[i - 1];
             const currentKeyWidth = keyWidths[i];
-            
-            leftValue += (priorKeyWidth) * keyDeclaration.offsets[i] - currentKeyWidth / 2;
+
+            leftValue +=
+              priorKeyWidth * keyDeclaration.offsets[i] - currentKeyWidth / 2;
           }
 
           return (
@@ -78,15 +81,37 @@ export default forwardRef<HTMLDivElement, XenKeyboardProps>(
               position="absolute"
               top="0px"
               left={`${leftValue}px`}
-              transition={`background-color ${pressAnimationDuration}ms ease-in-out`}
-              outline={`${keyClass.outlineThickness}px solid ${keyClass.outlineColor}`}
-              css={css`
-                background-color: ${keyClass.baseColor};
-                &:active {
-                  background-color: ${keyClass.pressedColor};
-                }
-              `}
-            ></Div>
+            >
+              {iota(keyDeclaration.divisions).map((subKeyIndex) => {
+                const subReactKey = `${reactKey}-sub-${subKeyIndex}`;
+                const verticalIndex =
+                  keyDeclaration.divisions - 1 - subKeyIndex;
+                const verticalPosition =
+                  (verticalIndex * keyHeights[keyClassIndex]) /
+                  keyDeclaration.divisions;
+                return (
+                  <Div
+                    key={subReactKey}
+                    position="absolute"
+                    top={`${verticalPosition}px`}
+                    left="0px"
+                    width={`${keyWidths[keyClassIndex]}px`}
+                    height={`${
+                      keyHeights[keyClassIndex] / keyDeclaration.divisions
+                    }px`}
+                    transition={`background-color ${pressAnimationDuration}ms ease-in-out`}
+                    outline={`${keyClass.outlineThickness}px solid ${keyClass.outlineColor}`}
+                    cursor="pointer"
+                    css={css`
+                      background-color: ${keyClass.baseColor};
+                      &:active {
+                        background-color: ${keyClass.pressedColor};
+                      }
+                    `}
+                  ></Div>
+                );
+              })}
+            </Div>
           );
         })}
       </Div>

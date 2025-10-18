@@ -71,15 +71,15 @@ export function make12EDO(
     whiteKeyAppearance = {
         baseColor: "hsl(0, 0%, 100%)",
         pressedColor: "hsl(0, 0%, 65%)",
-        outlineColor: "hsl(0, 0%, 0%)",
-        outlineThickness: 1,
+        outlineColor: "hsl(0, 0%, 50%)",
+        outlineThickness: 3,
 
     },
     blackKeyAppearance = {
         baseColor: "hsl(0, 0%, 0%)",
         pressedColor: "hsl(0, 0%, 30%)",
-        outlineColor: "hsl(0, 0%, 100%)",
-        outlineThickness: 1,
+        outlineColor: "hsl(0, 0%, 50%)",
+        outlineThickness: 3,
     },
     blackKeyWidthToWhiteKeyWidthRatio = 0.8,
     blackKeyHeight=0.8
