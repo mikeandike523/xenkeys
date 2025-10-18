@@ -68,13 +68,18 @@ const keyDeclarations: Array<KeyDeclaration> = [
 ]
 
 export function make12EDO(
-    whiteKeyColors = {
+    whiteKeyAppearance = {
         baseColor: "hsl(0, 0%, 100%)",
         pressedColor: "hsl(0, 0%, 65%)",
+        outlineColor: "hsl(0, 0%, 0%)",
+        outlineThickness: 1,
+
     },
-    blackKeyColors = {
+    blackKeyAppearance = {
         baseColor: "hsl(0, 0%, 0%)",
         pressedColor: "hsl(0, 0%, 30%)",
+        outlineColor: "hsl(0, 0%, 100%)",
+        outlineThickness: 1,
     },
     blackKeyWidthToWhiteKeyWidthRatio = 0.8,
     blackKeyHeight=0.8
@@ -84,15 +89,19 @@ export function make12EDO(
         {
             widthFraction: 1/7,
             heightFraction: 1,
-            baseColor: whiteKeyColors.baseColor,
-            pressedColor: whiteKeyColors.pressedColor,
+            baseColor: whiteKeyAppearance.baseColor,
+            pressedColor: whiteKeyAppearance.pressedColor,
+            outlineColor: whiteKeyAppearance.outlineColor,
+            outlineThickness: whiteKeyAppearance.outlineThickness,
         },
         // Black keys
         {
-            widthFraction: blackKeyWidthToWhiteKeyWidthRatio * 1/7,
+            widthFraction: blackKeyWidthToWhiteKeyWidthRatio,
             heightFraction: blackKeyHeight,
-            baseColor: blackKeyColors.baseColor,
-            pressedColor: blackKeyColors.pressedColor,
+            baseColor: blackKeyAppearance.baseColor,
+            pressedColor: blackKeyAppearance.pressedColor,
+            outlineColor: blackKeyAppearance.outlineColor,
+            outlineThickness: blackKeyAppearance.outlineThickness,
         }
     ];
     return {

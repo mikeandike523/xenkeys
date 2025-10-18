@@ -27,6 +27,10 @@ export type KeyClass = {
      * Color when pressed
      */
     pressedColor: string
+
+    outlineColor: string
+
+    outlineThickness: number
 }
 
 export type KeyDeclaration = {
