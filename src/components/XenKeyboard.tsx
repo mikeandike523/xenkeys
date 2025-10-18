@@ -14,7 +14,7 @@ export interface XenKeyboardProps extends DivProps {
   octaveNumber: number;
 
   onIdPress(pitchId: number, pitch: number): void;
-  onIdRelease(pitchId: number, pitch: number): void;
+  onIdRelease(pitchId: number): void;
 }
 
 /**
@@ -100,7 +100,7 @@ export default forwardRef<HTMLDivElement, XenKeyboardProps>(function XenKeyboard
     for (const [pointerId, rec] of activePointersRef.current) {
       if (rec.currentKeyEl && rec.pitchId !== undefined && rec.pitch !== undefined) {
         setPressedAttr(rec.currentKeyEl, false);
-        onIdRelease(rec.pitchId, rec.pitch);
+        onIdRelease(rec.pitchId);
       }
       try {
         rec.captureEl.releasePointerCapture?.(pointerId);
@@ -170,7 +170,7 @@ export default forwardRef<HTMLDivElement, XenKeyboardProps>(function XenKeyboard
     if (!newKeyEl) {
       if (rec.currentKeyEl && rec.pitchId !== undefined && rec.pitch !== undefined) {
         setPressedAttr(rec.currentKeyEl, false);
-        onIdRelease(rec.pitchId, rec.pitch);
+        onIdRelease(rec.pitchId);
       }
       rec.currentKeyEl = null;
       rec.pitchId = undefined;
@@ -184,7 +184,7 @@ export default forwardRef<HTMLDivElement, XenKeyboardProps>(function XenKeyboard
     if (rec.currentKeyEl) {
       setPressedAttr(rec.currentKeyEl, false);
       if (rec.pitchId !== undefined && rec.pitch !== undefined) {
-        onIdRelease(rec.pitchId, rec.pitch);
+        onIdRelease(rec.pitchId);
       }
       try {
         rec.captureEl.releasePointerCapture?.(e.pointerId);
@@ -213,7 +213,7 @@ export default forwardRef<HTMLDivElement, XenKeyboardProps>(function XenKeyboard
     // Release currently sounding key if any
     if (rec.currentKeyEl && rec.pitchId !== undefined && rec.pitch !== undefined) {
       setPressedAttr(rec.currentKeyEl, false);
-      onIdRelease(rec.pitchId, rec.pitch);
+      onIdRelease(rec.pitchId);
     }
 
     try {
@@ -347,7 +347,7 @@ export default forwardRef<HTMLDivElement, XenKeyboardProps>(function XenKeyboard
                     if (e.key === " " || e.key === "Enter") {
                       const el = e.currentTarget as HTMLElement;
                       setPressedAttr(el, false);
-                      onIdRelease(globalPitchId, initialPitch);
+                      onIdRelease(globalPitchId);
                     }
                   }}
                 />

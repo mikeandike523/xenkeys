@@ -41,6 +41,14 @@ function App() {
   const currentPlayAreaWidth = playAreaSize?.width || 0;
   const currentPlayAreaHeight = playAreaSize?.height || 0;
 
+  const onIdPress = (id: number, pitch: number) => {
+    console.log(`ID ${id} press, pitch ${pitch}`);
+  } 
+
+  const onIdRelease = (id: number) => {
+    console.log(`ID ${id} release`);
+  }
+
   return (
     <>
       <Header
@@ -76,6 +84,8 @@ function App() {
             octaveNumber={4}
             top={0}
             left={0}
+            onIdPress={onIdPress}
+            onIdRelease={onIdRelease}
             ></XenKeyboard>
         }
       </Main>
@@ -84,7 +94,3 @@ function App() {
 }
 
 export default App;
-function make12EDOManifest() {
-  throw new Error("Function not implemented.");
-}
-
