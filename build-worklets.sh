@@ -1,6 +1,8 @@
 #!/bin/bash
 
-./node_modules/.bin/esbuild "src/worklets/**/*.ts" \
+rm -rf public/worklets
+
+./node_modules/.bin/esbuild "src/worklets/**/*.worklet.ts" \
   --bundle \
   --format=esm \
   --platform=browser \

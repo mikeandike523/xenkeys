@@ -11,7 +11,7 @@
 // - Include "DOM" and "WebWorker" libs in tsconfig for AudioWorklet types.
 // - ESM output (no IIFE). See the esbuild command you planned earlier.
 
-import { type AudioParamDescriptor } from "./extra-glue-types";
+import { type AudioParamDescriptor } from "./extra-glue-types.d";
 
 import {
   Envelope,
