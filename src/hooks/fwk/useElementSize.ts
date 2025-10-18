@@ -3,7 +3,7 @@ import { throttle } from "lodash";
 
 const DEFAULT_THROTTLE_MILLIS = 100;
 
-interface UseElementSizeOptions {
+export interface UseElementSizeOptions {
   throttleMillis?: number;
   includeTransforms?: boolean;
   silent?: boolean;
@@ -33,7 +33,7 @@ export interface MeasurableElement extends Element {
  * @returns A DOMRect object representing the element's size and position, or null if not yet measured.
  */
 export function useElementSize<T extends MeasurableElement>(
-  ref: RefObject<T>,
+  ref: RefObject<T> | RefObject<T | null>,
   options: UseElementSizeOptions = {}
 ): DOMRect | null {
   const {
