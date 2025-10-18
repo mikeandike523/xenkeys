@@ -1,14 +1,13 @@
 import { useRef, useState, type ChangeEvent } from "react";
-import { Button, Header, Main, Select, Option } from "style-props-html";
+import { Header, Main, Option, Select } from "style-props-html";
 
 import "./App.css";
 import { useElementRefBySelector } from "./hooks/fwk/useElementRefBySelector";
 import { useElementSize } from "./hooks/fwk/useElementSize";
 
 import XenKeyboard from "./components/XenKeyboard";
-import type XenOctaveDisplayManifest from "./types/XenOctaveDisplayManifest";
 import { make12EDO } from "./data/edo-presets/12edo";
-import {make24EDO} from "./data/edo-presets/24edo";
+import { make24EDO } from "./data/edo-presets/24edo";
 
 
 const default12EdoManifest = make12EDO();
