@@ -1,0 +1,22 @@
+{
+  
+  "compilerOptions": {
+    "composite": false,
+    "noEmit": true,                       // esbuild will emit; ts just type-checks if you want
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "target": "ES2020",
+    "lib": ["ES2020"],// AudioWorklet types live in DOM; worker globals in WebWorker
+    "strict": true,
+    "useDefineForClassFields": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      // If you share helpers, map them here; esbuild will resolve and bundle them
+      //"@worklets/*": ["src/worklets/*"],
+      "@shared-types/*": ["src/shared-types/*"]
+    }
+  },
+  "include": ["src/worklets", "src/shared-types"],
+}
