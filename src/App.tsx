@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import { Button, Header, Main } from "style-props-html";
+import { useRef, useState, type ChangeEvent } from "react";
+import { Button, Header, Main, Select, Option } from "style-props-html";
 
 import "./App.css";
 import { useElementRefBySelector } from "./hooks/fwk/useElementRefBySelector";
@@ -8,8 +8,16 @@ import { useElementSize } from "./hooks/fwk/useElementSize";
 import XenKeyboard from "./components/XenKeyboard";
 import type XenOctaveDisplayManifest from "./types/XenOctaveDisplayManifest";
 import { make12EDO } from "./data/edo-presets/12edo";
+import {make24EDO} from "./data/edo-presets/24edo";
+
 
 const default12EdoManifest = make12EDO();
+const default24EdoManifest = make24EDO();
+
+const manifestPresets = {
+  "12edo": default12EdoManifest,
+  "24edo": default24EdoManifest,
+}
 
 function App() {
   const bodyRef = useElementRefBySelector<HTMLBodyElement>("body");
@@ -24,7 +32,9 @@ function App() {
   const bodyHeight = bodySize?.height || 0;
   const cpanelHeight = cpanelRefSize?.height || 0;
 
-  const [manifest, setManifest] = useState<XenOctaveDisplayManifest>(default12EdoManifest)
+  const [manifestName, setManifestName] = useState<keyof typeof manifestPresets>("12edo");
+
+  const manifest = manifestPresets[manifestName];
 
   const playAreaSize = useElementSize(playAreaRef);
 
@@ -38,9 +48,14 @@ function App() {
         ref={cpanelRef}
         //  For debugging
         background="teal"
+        padding="0.5rem"
       >
-        {/* for debugging */}
-        <Button>Test</Button>
+        <Select value={manifestName} onChange={(e: ChangeEvent<HTMLSelectElement>)=>{
+          setManifestName(e.target.value as keyof typeof manifestPresets);
+        }} fontSize="2rem">
+          <Option value="12edo">12EDO</Option>
+          <Option value="24edo">24EDO</Option>
+        </Select>
       </Header>
       <Main
         width="100%"
