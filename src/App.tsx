@@ -37,6 +37,7 @@ function App() {
   const [waveform, setWaveform] = useState<Waveform>("sine");
   const [envelope, setEnvelope] = useState<Envelope>({ attack: 0.01, decay: 0.1, sustain: 0.7, release: 0.5 });
   const [synth, setSynth] = useState<Synth | null>(null);
+  const [started, setStarted] = useState(false);
 
   // Initialize the audio worklet once
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -70,6 +71,13 @@ function App() {
 
   const onIdRelease = useCallback((id: number) => {
     synth?.noteOff(id);
+  }, [synth]);
+
+  const handleStart = useCallback(async () => {
+    if (synth) {
+      await synth.resume();
+    }
+    setStarted(true);
   }, [synth]);
 
   return (
@@ -174,6 +182,11 @@ function App() {
             ></XenKeyboard>
         }
       </Main>
+      {!started && (
+        <div className="audio-modal" onClick={handleStart}>
+          <span>Click to Start Audio</span>
+        </div>
+      )}
     </>
   );
 }

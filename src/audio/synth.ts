@@ -23,10 +23,13 @@ export default class Synth {
     return new Synth(ctx, node);
   }
 
-  /** Resume audio context if not already running. */
-  resume(): void {
+  /**
+   * Resume audio context if not already running.
+   * Returns a promise that resolves when the audio context is running.
+   */
+  async resume(): Promise<void> {
     if (this.context.state !== "running") {
-      this.context.resume();
+      await this.context.resume();
     }
   }
 
