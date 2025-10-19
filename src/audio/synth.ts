@@ -1,4 +1,4 @@
-import type { Envelope, PitchSynthMessage, Waveform } from "@shared-types/audio-engine";
+import type { Envelope, PitchSynthMessage, Waveform } from "../shared-types/audio-engine";
 
 /**
  * Synthesizer engine wrapping the AudioWorklet pitch-synth processor.

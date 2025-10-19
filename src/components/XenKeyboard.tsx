@@ -132,27 +132,28 @@ export default forwardRef<HTMLDivElement, XenKeyboardProps>(function XenKeyboard
 
   // --- Pointer handlers ------------------------------------------------------
 
-  function handlePointerDown(e: React.PointerEvent<HTMLElement>) {
-    // All interactive keys carry data-xen-subkey="true".
-    // We rely on that instead of any specific component variables.
-    e.preventDefault();
-    const keyEl = e.currentTarget as HTMLElement;
+  
+  // function handlePointerDown(e: React.PointerEvent<HTMLElement>) {
+  //   // All interactive keys carry data-xen-subkey="true".
+  //   // We rely on that instead of any specific component variables.
+  //   e.preventDefault();
+  //   const keyEl = e.currentTarget as HTMLElement;
 
-    // Initial capture on the pressed key (per pointerId, allows multitouch)
-    keyEl.setPointerCapture(e.pointerId);
+  //   // Initial capture on the pressed key (per pointerId, allows multitouch)
+  //   keyEl.setPointerCapture(e.pointerId);
 
-    const { pitchId, pitch } = getIdsAndPitchFromSubKey(keyEl);
+  //   const { pitchId, pitch } = getIdsAndPitchFromSubKey(keyEl);
 
-    setPressedAttr(keyEl, true);
-    onIdPress(pitchId, pitch);
+  //   setPressedAttr(keyEl, true);
+  //   onIdPress(pitchId, pitch);
 
-    activePointersRef.current.set(e.pointerId, {
-      captureEl: keyEl,
-      currentKeyEl: keyEl,
-      pitchId,
-      pitch,
-    });
-  }
+  //   activePointersRef.current.set(e.pointerId, {
+  //     captureEl: keyEl,
+  //     currentKeyEl: keyEl,
+  //     pitchId,
+  //     pitch,
+  //   });
+  // }
 
   function handlePointerMove(e: React.PointerEvent<HTMLElement>) {
     const rec = activePointersRef.current.get(e.pointerId);

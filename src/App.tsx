@@ -6,7 +6,7 @@ import { useElementRefBySelector } from "./hooks/fwk/useElementRefBySelector";
 import { useElementSize } from "./hooks/fwk/useElementSize";
 
 import XenKeyboard from "./components/XenKeyboard";
-import type { Waveform, Envelope } from "@shared-types/audio-engine";
+import type { Waveform, Envelope } from "./shared-types/audio-engine";
 import Synth from "./audio/synth";
 import { make12EDO } from "./data/edo-presets/12edo";
 import { make24EDO } from "./data/edo-presets/24edo";
