@@ -180,7 +180,7 @@ function App() {
           background="teal"
           color="white"
           padding="0.5rem"
-          zIndex="1000"
+          zIndex={9999}
           onClick={() => setHeaderCollapsed(false)}
         >
           ☰
