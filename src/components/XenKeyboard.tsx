@@ -275,7 +275,7 @@ export default forwardRef<HTMLDivElement, XenKeyboardProps>(
           return (
             <Div
               key={reactKey}
-              zIndex={octaveNumber * manifest.keyClasses.length + keyClassIndex}
+              zIndex={keyClassIndex}
               width={`${keyWidths[keyClassIndex]}px`}
               height={`${keyHeights[keyClassIndex]}px`}
               position="absolute"

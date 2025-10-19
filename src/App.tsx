@@ -1,5 +1,19 @@
-import { useRef, useState, useEffect, useCallback, type ChangeEvent } from "react";
-import { Header, Main, Option, Select } from "style-props-html";
+import {
+  useRef,
+  useState,
+  useEffect,
+  useCallback,
+  type ChangeEvent,
+} from "react";
+import {
+  Button,
+  Div,
+  Header,
+  Main,
+  Option,
+  Select,
+  Span,
+} from "style-props-html";
 
 import "./App.css";
 import { useElementRefBySelector } from "./hooks/fwk/useElementRefBySelector";
@@ -10,8 +24,9 @@ import type { Waveform, Envelope } from "./shared-types/audio-engine";
 import Synth from "./audio/synth";
 import { make12EDO } from "./data/edo-presets/12edo";
 import { make24EDO } from "./data/edo-presets/24edo";
-import { make31EDO} from "./data/edo-presets/31edo";
-
+import { make31EDO } from "./data/edo-presets/31edo";
+import type XenOctaveDisplayManifest from "./types/XenOctaveDisplayManifest";
+import iota from "./utils/algorithms/iota";
 
 const default12EdoManifest = make12EDO();
 const default24EdoManifest = make24EDO();
@@ -21,6 +36,54 @@ const manifestPresets = {
   "12edo": default12EdoManifest,
   "24edo": default24EdoManifest,
   "31edo": default31EdoManifest,
+};
+
+function MultiOctaveDisplay({
+  manifest,
+  width,
+  height,
+  rows,
+  cols,
+  startingOctave,
+  onIdPress,
+  onIdRelease,
+}: {
+  manifest: XenOctaveDisplayManifest;
+  width: number;
+  height: number;
+  rows: number;
+  cols: number;
+  startingOctave: number;
+  onIdPress: (pitchId: number, pitch: number) => void;
+  onIdRelease: (pitchId: number) => void;
+}) {
+  const octaveWidth = width / cols;
+  const octaveHeight = height / rows;
+  return iota(rows).map((row) => {
+    return iota(cols).map((col) => {
+      const startX = col * octaveWidth;
+      const startY = row * octaveHeight;
+      const octaveNumber = startingOctave + (rows - 1 - row) * cols + col;
+      const reactKey = `octave-${octaveNumber}`;
+      // Lower octave above higher octave to account for partially overflowing keys
+      const zIndex = cols - 1 - col;
+      return (
+        <Div key={reactKey}>
+          <XenKeyboard
+            zIndex={zIndex}
+            width={octaveWidth}
+            height={octaveHeight}
+            manifest={manifest}
+            top={startY}
+            left={startX}
+            octaveNumber={octaveNumber}
+            onIdPress={onIdPress}
+            onIdRelease={onIdRelease}
+          />
+        </Div>
+      );
+    });
+  });
 }
 
 function App() {
@@ -36,11 +99,20 @@ function App() {
   const bodyHeight = bodySize?.height || 0;
   const cpanelHeight = cpanelRefSize?.height || 0;
 
-  const [manifestName, setManifestName] = useState<keyof typeof manifestPresets>("12edo");
+  const [manifestName, setManifestName] =
+    useState<keyof typeof manifestPresets>("12edo");
   const [waveform, setWaveform] = useState<Waveform>("sine");
-  const [envelope, setEnvelope] = useState<Envelope>({ attack: 0.01, decay: 0.1, sustain: 0.7, release: 0.5 });
+  const [envelope, setEnvelope] = useState<Envelope>({
+    attack: 0.01,
+    decay: 0.1,
+    sustain: 0.7,
+    release: 0.5,
+  });
   const [synth, setSynth] = useState<Synth | null>(null);
   const [started, setStarted] = useState(false);
+  const [startingOctave, setStartingOctave] = useState<number>(4);
+  const [octaveRows, _setOctaveRows] = useState<number>(1);
+  const [octaveCols, _setOctaveCols] = useState<number>(2);
 
   // Initialize the audio worklet once
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -67,14 +139,20 @@ function App() {
   const currentPlayAreaWidth = playAreaSize?.width || 0;
   const currentPlayAreaHeight = playAreaSize?.height || 0;
 
-  const onIdPress = useCallback((id: number, pitch: number) => {
-    synth?.resume();
-    synth?.noteOn(id, pitch, envelope);
-  }, [synth, envelope]);
+  const onIdPress = useCallback(
+    (id: number, pitch: number) => {
+      synth?.resume();
+      synth?.noteOn(id, pitch, envelope);
+    },
+    [synth, envelope]
+  );
 
-  const onIdRelease = useCallback((id: number) => {
-    synth?.noteOff(id);
-  }, [synth]);
+  const onIdRelease = useCallback(
+    (id: number) => {
+      synth?.noteOff(id);
+    },
+    [synth]
+  );
 
   const handleStart = useCallback(async () => {
     if (synth) {
@@ -99,14 +177,20 @@ function App() {
           }}
           fontSize="2rem"
         >
-          {Object.keys(manifestPresets).map((presetName) => <Option key={presetName} value={presetName}>{presetName}</Option>)}
+          {Object.keys(manifestPresets).map((presetName) => (
+            <Option key={presetName} value={presetName}>
+              {presetName}
+            </Option>
+          ))}
         </Select>
 
         <Select
           value={waveform}
-          onChange={(e: ChangeEvent<HTMLSelectElement>) => setWaveform(e.target.value as Waveform)}
+          onChange={(e: ChangeEvent<HTMLSelectElement>) =>
+            setWaveform(e.target.value as Waveform)
+          }
           fontSize="2rem"
-          style={{ marginLeft: '1rem' }}
+          style={{ marginLeft: "1rem" }}
         >
           <Option value="sine">Sine</Option>
           <Option value="square">Square</Option>
@@ -114,29 +198,39 @@ function App() {
           <Option value="sawtooth">Sawtooth</Option>
         </Select>
 
-        <label style={{ marginLeft: '1rem', color: 'white' }}>
+        <label style={{ marginLeft: "1rem", color: "white" }}>
           A:
           <input
             type="number"
             min={0}
             step={0.01}
             value={envelope.attack}
-            onChange={(e) => setEnvelope({ ...envelope, attack: parseFloat(e.target.value) || 0 })}
-            style={{ width: '4rem', marginLeft: '0.25rem' }}
+            onChange={(e) =>
+              setEnvelope({
+                ...envelope,
+                attack: parseFloat(e.target.value) || 0,
+              })
+            }
+            style={{ width: "4rem", marginLeft: "0.25rem" }}
           />
         </label>
-        <label style={{ marginLeft: '0.5rem', color: 'white' }}>
+        <label style={{ marginLeft: "0.5rem", color: "white" }}>
           D:
           <input
             type="number"
             min={0}
             step={0.01}
             value={envelope.decay}
-            onChange={(e) => setEnvelope({ ...envelope, decay: parseFloat(e.target.value) || 0 })}
-            style={{ width: '4rem', marginLeft: '0.25rem' }}
+            onChange={(e) =>
+              setEnvelope({
+                ...envelope,
+                decay: parseFloat(e.target.value) || 0,
+              })
+            }
+            style={{ width: "4rem", marginLeft: "0.25rem" }}
           />
         </label>
-        <label style={{ marginLeft: '0.5rem', color: 'white' }}>
+        <label style={{ marginLeft: "0.5rem", color: "white" }}>
           S:
           <input
             type="number"
@@ -144,21 +238,55 @@ function App() {
             max={1}
             step={0.05}
             value={envelope.sustain}
-            onChange={(e) => setEnvelope({ ...envelope, sustain: parseFloat(e.target.value) || 0 })}
-            style={{ width: '4rem', marginLeft: '0.25rem' }}
+            onChange={(e) =>
+              setEnvelope({
+                ...envelope,
+                sustain: parseFloat(e.target.value) || 0,
+              })
+            }
+            style={{ width: "4rem", marginLeft: "0.25rem" }}
           />
         </label>
-        <label style={{ marginLeft: '0.5rem', color: 'white' }}>
+        <label style={{ marginLeft: "0.5rem", color: "white" }}>
           R:
           <input
             type="number"
             min={0}
             step={0.01}
             value={envelope.release}
-            onChange={(e) => setEnvelope({ ...envelope, release: parseFloat(e.target.value) || 0 })}
-            style={{ width: '4rem', marginLeft: '0.25rem' }}
+            onChange={(e) =>
+              setEnvelope({
+                ...envelope,
+                release: parseFloat(e.target.value) || 0,
+              })
+            }
+            style={{ width: "4rem", marginLeft: "0.25rem" }}
           />
         </label>
+        <Div
+          marginLeft="0.5rem"
+          display="flex"
+          flexDirection="row"
+          alignItems="center"
+          gap="0.5rem"
+        >
+          <Span>Starting Octave:</Span>
+          <Button
+            onClick={() => {
+              setStartingOctave(startingOctave - 1);
+            }}
+          >
+            &lt;
+          </Button>
+          <Span>{startingOctave}</Span>
+          <Button
+            onClick={() => {
+              setStartingOctave(startingOctave + 1);
+            }}
+          >
+            &gt;
+          </Button>
+        </Div>
       </Header>
       <Main
         width="100%"
@@ -169,21 +297,18 @@ function App() {
         position="relative"
         overflow="hidden"
       >
-        {
-          currentPlayAreaHeight > 0 && currentPlayAreaWidth > 0 &&
-
-          <XenKeyboard
+        {currentPlayAreaHeight > 0 && currentPlayAreaWidth > 0 && (
+          <MultiOctaveDisplay
             manifest={manifest}
-            width={currentPlayAreaWidth}
-            height={currentPlayAreaHeight}
-            // Great for multi-octave displays later
-            octaveNumber={4}
-            top={0}
-            left={0}
+            rows={octaveRows}
+            cols={octaveCols}
+            startingOctave={startingOctave}
             onIdPress={onIdPress}
             onIdRelease={onIdRelease}
-            ></XenKeyboard>
-        }
+            width={currentPlayAreaWidth}
+            height={currentPlayAreaHeight}
+          />
+        )}
       </Main>
       {!started && (
         <div className="audio-modal" onClick={handleStart}>
