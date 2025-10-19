@@ -10,7 +10,7 @@ import type { Waveform, Envelope } from "./shared-types/audio-engine";
 import Synth from "./audio/synth";
 import { make12EDO } from "./data/edo-presets/12edo";
 import { make24EDO } from "./data/edo-presets/24edo";
-import make31EDO from "./data/edo-presets/31edo";
+import { make31EDO} from "./data/edo-presets/31edo";
 
 
 const default12EdoManifest = make12EDO();
