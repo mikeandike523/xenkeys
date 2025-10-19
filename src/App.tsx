@@ -99,8 +99,7 @@ function App() {
           }}
           fontSize="2rem"
         >
-          <Option value="12edo">12EDO</Option>
-          <Option value="24edo">24EDO</Option>
+          {Object.keys(manifestPresets).map((presetName) => <Option key={presetName} value={presetName}>{presetName}</Option>)}
         </Select>
 
         <Select
