@@ -161,15 +161,45 @@ function App() {
     setStarted(true);
   }, [synth]);
 
+  const [headerCollapsed, setHeaderCollapsed] = useState(false);
+  const toggleFullScreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(console.error);
+    } else {
+      document.exitFullscreen().catch(console.error);
+    }
+  }, []);
+
   return (
     <>
-      <Header
+      {headerCollapsed ? (
+        <Button
+          position="fixed"
+          top="0.5rem"
+          left="0.5rem"
+          background="teal"
+          color="white"
+          padding="0.5rem"
+          zIndex="1000"
+          onClick={() => setHeaderCollapsed(false)}
+        >
+          ☰
+        </Button>
+      ) : (
+        <Header
         width="100%"
         ref={cpanelRef}
         //  For debugging
         background="teal"
         padding="0.5rem"
       >
+        <Button
+          onClick={() => setHeaderCollapsed(true)}
+          marginRight="1rem"
+          padding="0.5rem"
+        >
+          ☰
+        </Button>
         <Select
           value={manifestName}
           onChange={(e: ChangeEvent<HTMLSelectElement>) => {
@@ -287,7 +317,13 @@ function App() {
             &gt;
           </Button>
         </Div>
+        <Div marginLeft="auto" display="flex" alignItems="center">
+          <Button onClick={toggleFullScreen} padding="0.5rem">
+            ⛶
+          </Button>
+        </Div>
       </Header>
+      )}
       <Main
         width="100%"
         ref={playAreaRef}
