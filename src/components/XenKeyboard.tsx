@@ -235,6 +235,10 @@ export default forwardRef<HTMLDivElement, XenKeyboardProps>(function XenKeyboard
       css={css`
         touch-action: none;  /* we fully handle gestures */
         user-select: none;
+        /* Remove or customize the mobile tap flash */
+        -webkit-tap-highlight-color: transparent; /* or rgba(0,0,0,.1) to match theme */
+        /* Optional: prevent iOS long-press actions on keys */
+        -webkit-touch-callout: none;
       `}
       {...rest}
     >
@@ -308,12 +312,31 @@ export default forwardRef<HTMLDivElement, XenKeyboardProps>(function XenKeyboard
                   css={css`
                     touch-action: none;
                     background-color: ${keyClass.baseColor};
+
+                    /* pressed/touched state */
                     &[data-pressed="true"] {
                       background-color: ${keyClass.pressedColor};
                     }
+
+                    /* Keyboard-visible focus style only */
                     &:focus-visible {
+                      outline: none; /* remove UA outline */
                       box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.3) inset;
                     }
+
+                    /* Suppress non-keyboard focus rings (e.g., tap focus) */
+                    &:focus:not(:focus-visible) {
+                      outline: none;
+                      box-shadow: none;
+                    }
+
+                    /* Extra guard */
+                    &:focus {
+                      outline: none;
+                    }
+
+                    /* Prevent blue/gray flash on individual keys as well (belt & suspenders) */
+                    -webkit-tap-highlight-color: transparent;
                   `}
                   // Pointer Events: unified + glissando
                   onPointerDown={(e) => {
