@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent } from "react";
+import { useRef, useState, useEffect, useCallback, type ChangeEvent } from "react";
 import { Header, Main, Option, Select } from "style-props-html";
 
 import "./App.css";
@@ -6,6 +6,8 @@ import { useElementRefBySelector } from "./hooks/fwk/useElementRefBySelector";
 import { useElementSize } from "./hooks/fwk/useElementSize";
 
 import XenKeyboard from "./components/XenKeyboard";
+import type { Waveform, Envelope } from "@shared-types/audio-engine";
+import Synth from "./audio/synth";
 import { make12EDO } from "./data/edo-presets/12edo";
 import { make24EDO } from "./data/edo-presets/24edo";
 
@@ -32,6 +34,27 @@ function App() {
   const cpanelHeight = cpanelRefSize?.height || 0;
 
   const [manifestName, setManifestName] = useState<keyof typeof manifestPresets>("12edo");
+  const [waveform, setWaveform] = useState<Waveform>("sine");
+  const [envelope, setEnvelope] = useState<Envelope>({ attack: 0.01, decay: 0.1, sustain: 0.7, release: 0.5 });
+  const [synth, setSynth] = useState<Synth | null>(null);
+
+  // Initialize the audio worklet once
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    Synth.create().then((s) => {
+      setSynth(s);
+      s.setWaveform(waveform);
+      s.setEnvelope(envelope);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (synth) synth.setWaveform(waveform);
+  }, [synth, waveform]);
+
+  useEffect(() => {
+    if (synth) synth.setEnvelope(envelope);
+  }, [synth, envelope]);
 
   const manifest = manifestPresets[manifestName];
 
@@ -40,13 +63,14 @@ function App() {
   const currentPlayAreaWidth = playAreaSize?.width || 0;
   const currentPlayAreaHeight = playAreaSize?.height || 0;
 
-  const onIdPress = (id: number, pitch: number) => {
-    console.log(`ID ${id} press, pitch ${pitch}`);
-  } 
+  const onIdPress = useCallback((id: number, pitch: number) => {
+    synth?.resume();
+    synth?.noteOn(id, pitch, envelope);
+  }, [synth, envelope]);
 
-  const onIdRelease = (id: number) => {
-    console.log(`ID ${id} release`);
-  }
+  const onIdRelease = useCallback((id: number) => {
+    synth?.noteOff(id);
+  }, [synth]);
 
   return (
     <>
@@ -57,12 +81,74 @@ function App() {
         background="teal"
         padding="0.5rem"
       >
-        <Select value={manifestName} onChange={(e: ChangeEvent<HTMLSelectElement>)=>{
-          setManifestName(e.target.value as keyof typeof manifestPresets);
-        }} fontSize="2rem">
+        <Select
+          value={manifestName}
+          onChange={(e: ChangeEvent<HTMLSelectElement>) => {
+            setManifestName(e.target.value as keyof typeof manifestPresets);
+          }}
+          fontSize="2rem"
+        >
           <Option value="12edo">12EDO</Option>
           <Option value="24edo">24EDO</Option>
         </Select>
+
+        <Select
+          value={waveform}
+          onChange={(e: ChangeEvent<HTMLSelectElement>) => setWaveform(e.target.value as Waveform)}
+          fontSize="2rem"
+          style={{ marginLeft: '1rem' }}
+        >
+          <Option value="sine">Sine</Option>
+          <Option value="square">Square</Option>
+          <Option value="triangle">Triangle</Option>
+          <Option value="sawtooth">Sawtooth</Option>
+        </Select>
+
+        <label style={{ marginLeft: '1rem', color: 'white' }}>
+          A:
+          <input
+            type="number"
+            min={0}
+            step={0.01}
+            value={envelope.attack}
+            onChange={(e) => setEnvelope({ ...envelope, attack: parseFloat(e.target.value) || 0 })}
+            style={{ width: '4rem', marginLeft: '0.25rem' }}
+          />
+        </label>
+        <label style={{ marginLeft: '0.5rem', color: 'white' }}>
+          D:
+          <input
+            type="number"
+            min={0}
+            step={0.01}
+            value={envelope.decay}
+            onChange={(e) => setEnvelope({ ...envelope, decay: parseFloat(e.target.value) || 0 })}
+            style={{ width: '4rem', marginLeft: '0.25rem' }}
+          />
+        </label>
+        <label style={{ marginLeft: '0.5rem', color: 'white' }}>
+          S:
+          <input
+            type="number"
+            min={0}
+            max={1}
+            step={0.05}
+            value={envelope.sustain}
+            onChange={(e) => setEnvelope({ ...envelope, sustain: parseFloat(e.target.value) || 0 })}
+            style={{ width: '4rem', marginLeft: '0.25rem' }}
+          />
+        </label>
+        <label style={{ marginLeft: '0.5rem', color: 'white' }}>
+          R:
+          <input
+            type="number"
+            min={0}
+            step={0.01}
+            value={envelope.release}
+            onChange={(e) => setEnvelope({ ...envelope, release: parseFloat(e.target.value) || 0 })}
+            style={{ width: '4rem', marginLeft: '0.25rem' }}
+          />
+        </label>
       </Header>
       <Main
         width="100%"
