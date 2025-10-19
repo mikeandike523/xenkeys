@@ -50,6 +50,10 @@ export type KeyDeclaration = {
      * 
      */
     microStepOffset: number
+    /**
+     * Which key-class this key declaration belongs to
+     */
+    classIndex: number
 }
 
 export default interface XenOctaveDisplayManifest {

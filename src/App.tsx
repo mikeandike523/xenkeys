@@ -167,6 +167,7 @@ function App() {
         // for debugging
         background="orange"
         position="relative"
+        overflow="hidden"
       >
         {
           currentPlayAreaHeight > 0 && currentPlayAreaWidth > 0 &&
