@@ -96,7 +96,9 @@ function App() {
 
   const cpanelRefSize = useElementSize(cpanelRef);
 
+  const bodyWidth = bodySize?.width || 0;
   const bodyHeight = bodySize?.height || 0;
+
   const cpanelHeight = cpanelRefSize?.height || 0;
 
   const [manifestName, setManifestName] =
@@ -110,9 +112,49 @@ function App() {
   });
   const [synth, setSynth] = useState<Synth | null>(null);
   const [started, setStarted] = useState(false);
-  const [startingOctave, setStartingOctave] = useState<number>(4);
-  const [octaveRows, _setOctaveRows] = useState<number>(1);
-  const [octaveCols, _setOctaveCols] = useState<number>(2);
+  const [startingOctave, setStartingOctave] = useState<number | null>(null);
+
+  const [octaveRows, setOctaveRows] = useState<number | null>(null);
+  const [octaveCols, setOctaveCols] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (bodyWidth > 0 && bodyHeight > 0) {
+      const aspect = bodyWidth / bodyHeight;
+      let rows = 1;
+      let cols = 1;
+      let initStartingOctave = 4;
+
+      if (aspect < 0.8) {
+        // Mobile portrait
+        rows = 2;
+        cols = 1;
+        initStartingOctave = 4;
+      } else if (aspect < 1.2) {
+        // iPad portrait
+        rows = 2;
+        cols = 2;
+        initStartingOctave = 3;
+      } else if (aspect < 1.8) {
+        // iPad landscape / standard screens
+        rows = 2;
+        cols = 2;
+        initStartingOctave = 3;
+      } else if (aspect < 2.5) {
+        // widescreen laptops
+        rows = 1;
+        cols = 4;
+        initStartingOctave = 2;
+      } else {
+        // ultrawide monitors
+        rows = 1;
+        cols = 6;
+        initStartingOctave = 1;
+      }
+      setStartingOctave(initStartingOctave);
+      setOctaveRows(rows);
+      setOctaveCols(cols);
+    }
+  }, [bodyWidth, bodyHeight]);
 
   // Initialize the audio worklet once
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -187,145 +229,143 @@ function App() {
         </Button>
       ) : (
         <Header
-        width="100%"
-        ref={cpanelRef}
-        //  For debugging
-        background="teal"
-        padding="0.5rem"
-        display="flex"
-        flexDirection="row"
-        alignItems="center"
-        overflowX="auto"
-        gap="0.5rem"
-
-      >
-        <Button
-          onClick={() => setHeaderCollapsed(true)}
+          width="100%"
+          ref={cpanelRef}
+          //  For debugging
+          background="teal"
           padding="0.5rem"
-        >
-          ☰
-        </Button>
-        <Select
-          value={manifestName}
-          onChange={(e: ChangeEvent<HTMLSelectElement>) => {
-            setManifestName(e.target.value as keyof typeof manifestPresets);
-          }}
-          fontSize="2rem"
-        >
-          {Object.keys(manifestPresets).map((presetName) => (
-            <Option key={presetName} value={presetName}>
-              {presetName}
-            </Option>
-          ))}
-        </Select>
-
-        <Select
-          value={waveform}
-          onChange={(e: ChangeEvent<HTMLSelectElement>) =>
-            setWaveform(e.target.value as Waveform)
-          }
-          fontSize="2rem"
-        >
-          <Option value="sine">Sine</Option>
-          <Option value="square">Square</Option>
-          <Option value="triangle">Triangle</Option>
-          <Option value="sawtooth">Sawtooth</Option>
-        </Select>
-
-        <label style={{ color: "white" }}>
-          A:
-          <input
-            type="number"
-            min={0}
-            step={0.01}
-            value={envelope.attack}
-            onChange={(e) =>
-              setEnvelope({
-                ...envelope,
-                attack: parseFloat(e.target.value) || 0,
-              })
-            }
-            style={{ width: "4rem", marginLeft: "0.25rem" }}
-          />
-        </label>
-        <label style={{  color: "white" }}>
-          D:
-          <input
-            type="number"
-            min={0}
-            step={0.01}
-            value={envelope.decay}
-            onChange={(e) =>
-              setEnvelope({
-                ...envelope,
-                decay: parseFloat(e.target.value) || 0,
-              })
-            }
-            style={{ width: "4rem", marginLeft: "0.25rem" }}
-          />
-        </label>
-        <label style={{ color: "white" }}>
-          S:
-          <input
-            type="number"
-            min={0}
-            max={1}
-            step={0.05}
-            value={envelope.sustain}
-            onChange={(e) =>
-              setEnvelope({
-                ...envelope,
-                sustain: parseFloat(e.target.value) || 0,
-              })
-            }
-            style={{ width: "4rem", marginLeft: "0.25rem" }}
-          />
-        </label>
-        <label style={{  color: "white" }}>
-          R:
-          <input
-            type="number"
-            min={0}
-            step={0.01}
-            value={envelope.release}
-            onChange={(e) =>
-              setEnvelope({
-                ...envelope,
-                release: parseFloat(e.target.value) || 0,
-              })
-            }
-            style={{ width: "4rem", marginLeft: "0.25rem" }}
-          />
-        </label>
-        <Div
           display="flex"
           flexDirection="row"
           alignItems="center"
+          overflowX="auto"
           gap="0.5rem"
         >
-          <Span color="white">Oct:</Span>
-          <Button
-            onClick={() => {
-              setStartingOctave(startingOctave - 1);
+          <Button onClick={() => setHeaderCollapsed(true)} padding="0.5rem">
+            ☰
+          </Button>
+          <Select
+            value={manifestName}
+            onChange={(e: ChangeEvent<HTMLSelectElement>) => {
+              setManifestName(e.target.value as keyof typeof manifestPresets);
             }}
+            fontSize="2rem"
           >
-            &lt;
-          </Button>
-          <Span color="white">{startingOctave}</Span>
-          <Button
-            onClick={() => {
-              setStartingOctave(startingOctave + 1);
-            }}
+            {Object.keys(manifestPresets).map((presetName) => (
+              <Option key={presetName} value={presetName}>
+                {presetName}
+              </Option>
+            ))}
+          </Select>
+
+          <Select
+            value={waveform}
+            onChange={(e: ChangeEvent<HTMLSelectElement>) =>
+              setWaveform(e.target.value as Waveform)
+            }
+            fontSize="2rem"
           >
-            &gt;
-          </Button>
-        </Div>
-        <Div marginLeft="auto" display="flex" alignItems="center">
-          <Button onClick={toggleFullScreen} padding="0.5rem">
-            ⛶
-          </Button>
-        </Div>
-      </Header>
+            <Option value="sine">Sine</Option>
+            <Option value="square">Square</Option>
+            <Option value="triangle">Triangle</Option>
+            <Option value="sawtooth">Sawtooth</Option>
+          </Select>
+
+          <label style={{ color: "white" }}>
+            A:
+            <input
+              type="number"
+              min={0}
+              step={0.01}
+              value={envelope.attack}
+              onChange={(e) =>
+                setEnvelope({
+                  ...envelope,
+                  attack: parseFloat(e.target.value) || 0,
+                })
+              }
+              style={{ width: "4rem", marginLeft: "0.25rem" }}
+            />
+          </label>
+          <label style={{ color: "white" }}>
+            D:
+            <input
+              type="number"
+              min={0}
+              step={0.01}
+              value={envelope.decay}
+              onChange={(e) =>
+                setEnvelope({
+                  ...envelope,
+                  decay: parseFloat(e.target.value) || 0,
+                })
+              }
+              style={{ width: "4rem", marginLeft: "0.25rem" }}
+            />
+          </label>
+          <label style={{ color: "white" }}>
+            S:
+            <input
+              type="number"
+              min={0}
+              max={1}
+              step={0.05}
+              value={envelope.sustain}
+              onChange={(e) =>
+                setEnvelope({
+                  ...envelope,
+                  sustain: parseFloat(e.target.value) || 0,
+                })
+              }
+              style={{ width: "4rem", marginLeft: "0.25rem" }}
+            />
+          </label>
+          <label style={{ color: "white" }}>
+            R:
+            <input
+              type="number"
+              min={0}
+              step={0.01}
+              value={envelope.release}
+              onChange={(e) =>
+                setEnvelope({
+                  ...envelope,
+                  release: parseFloat(e.target.value) || 0,
+                })
+              }
+              style={{ width: "4rem", marginLeft: "0.25rem" }}
+            />
+          </label>
+          {startingOctave !== null && (
+            <Div
+              display="flex"
+              flexDirection="row"
+              alignItems="center"
+              gap="0.5rem"
+            >
+              <Span color="white">Oct:</Span>
+              <Button
+                onClick={() => {
+                  setStartingOctave(startingOctave - 1);
+                }}
+              >
+                &lt;
+              </Button>
+              <Span color="white">{startingOctave}</Span>
+              <Button
+                onClick={() => {
+                  setStartingOctave(startingOctave + 1);
+                }}
+              >
+                &gt;
+              </Button>
+            </Div>
+          )}
+          <Div marginLeft="auto" display="flex" alignItems="center">
+            <Button onClick={toggleFullScreen} padding="0.5rem">
+              ⛶
+            </Button>
+          </Div>
+        </Header>
       )}
       <Main
         width="100%"
@@ -336,18 +376,22 @@ function App() {
         position="relative"
         overflow="hidden"
       >
-        {currentPlayAreaHeight > 0 && currentPlayAreaWidth > 0 && (
-          <MultiOctaveDisplay
-            manifest={manifest}
-            rows={octaveRows}
-            cols={octaveCols}
-            startingOctave={startingOctave}
-            onIdPress={onIdPress}
-            onIdRelease={onIdRelease}
-            width={currentPlayAreaWidth}
-            height={currentPlayAreaHeight}
-          />
-        )}
+        {currentPlayAreaHeight > 0 &&
+          currentPlayAreaWidth > 0 &&
+          octaveRows &&
+          octaveCols &&
+          startingOctave !== null && (
+            <MultiOctaveDisplay
+              manifest={manifest}
+              rows={octaveRows}
+              cols={octaveCols}
+              startingOctave={startingOctave}
+              onIdPress={onIdPress}
+              onIdRelease={onIdRelease}
+              width={currentPlayAreaWidth}
+              height={currentPlayAreaHeight}
+            />
+          )}
       </Main>
       {!started && (
         <div className="audio-modal" onClick={handleStart}>
