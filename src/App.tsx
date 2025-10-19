@@ -270,7 +270,7 @@ function App() {
           alignItems="center"
           gap="0.5rem"
         >
-          <Span>Starting Octave:</Span>
+          <Span>Oct:</Span>
           <Button
             onClick={() => {
               setStartingOctave(startingOctave - 1);
