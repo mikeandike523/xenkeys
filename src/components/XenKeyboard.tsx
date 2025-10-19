@@ -1,9 +1,8 @@
-import { Div, type DivProps } from "style-props-html";
-import { forwardRef, useEffect, useMemo, useRef } from "react";
 import { css } from "@emotion/react";
+import { forwardRef, useEffect, useMemo, useRef } from "react";
+import { Div, type DivProps } from "style-props-html";
 
 import type XenOctaveDisplayManifest from "../types/XenOctaveDisplayManifest";
-import lastIndexOfNonzeroValue from "../utils/algorithms/lastIndexOfNonzeroValue";
 import iota from "../utils/algorithms/iota";
 
 export interface XenKeyboardProps extends DivProps {
