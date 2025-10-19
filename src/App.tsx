@@ -192,10 +192,15 @@ function App() {
         //  For debugging
         background="teal"
         padding="0.5rem"
+        display="flex"
+        flexDirection="row"
+        alignItems="center"
+        overflowX="auto"
+        gap="0.5rem"
+
       >
         <Button
           onClick={() => setHeaderCollapsed(true)}
-          marginRight="1rem"
           padding="0.5rem"
         >
           ☰
@@ -220,7 +225,6 @@ function App() {
             setWaveform(e.target.value as Waveform)
           }
           fontSize="2rem"
-          style={{ marginLeft: "1rem" }}
         >
           <Option value="sine">Sine</Option>
           <Option value="square">Square</Option>
@@ -228,7 +232,7 @@ function App() {
           <Option value="sawtooth">Sawtooth</Option>
         </Select>
 
-        <label style={{ marginLeft: "1rem", color: "white" }}>
+        <label style={{ color: "white" }}>
           A:
           <input
             type="number"
@@ -244,7 +248,7 @@ function App() {
             style={{ width: "4rem", marginLeft: "0.25rem" }}
           />
         </label>
-        <label style={{ marginLeft: "0.5rem", color: "white" }}>
+        <label style={{  color: "white" }}>
           D:
           <input
             type="number"
@@ -260,7 +264,7 @@ function App() {
             style={{ width: "4rem", marginLeft: "0.25rem" }}
           />
         </label>
-        <label style={{ marginLeft: "0.5rem", color: "white" }}>
+        <label style={{ color: "white" }}>
           S:
           <input
             type="number"
@@ -277,7 +281,7 @@ function App() {
             style={{ width: "4rem", marginLeft: "0.25rem" }}
           />
         </label>
-        <label style={{ marginLeft: "0.5rem", color: "white" }}>
+        <label style={{  color: "white" }}>
           R:
           <input
             type="number"
@@ -294,13 +298,12 @@ function App() {
           />
         </label>
         <Div
-          marginLeft="0.5rem"
           display="flex"
           flexDirection="row"
           alignItems="center"
           gap="0.5rem"
         >
-          <Span>Oct:</Span>
+          <Span color="white">Oct:</Span>
           <Button
             onClick={() => {
               setStartingOctave(startingOctave - 1);
@@ -308,7 +311,7 @@ function App() {
           >
             &lt;
           </Button>
-          <Span>{startingOctave}</Span>
+          <Span color="white">{startingOctave}</Span>
           <Button
             onClick={() => {
               setStartingOctave(startingOctave + 1);
