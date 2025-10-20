@@ -16,8 +16,8 @@ const postAddMicroSteps = (amt: number) => {
 const keyDeclarations: Array<KeyDeclaration> = [
   {
     offsets: [0, 0, 0],
-    divisions: 2,
-    microStepOffset: postAddMicroSteps(2),
+    divisions: 1,
+    microStepOffset: postAddMicroSteps(1),
     classIndex: 0,
   }, // C
   {
@@ -100,6 +100,8 @@ const keyDeclarations: Array<KeyDeclaration> = [
   }, // BC-Gap Purple Key, will hang partly off-octave-rectangle
   // Todo: add better logic for z-index when we have multiple octaves
 ];
+
+console.log(microStepPointer)
 
 export function make22EDO(
   whiteKeyAppearance = {
