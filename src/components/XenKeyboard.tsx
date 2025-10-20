@@ -131,32 +131,49 @@ export default forwardRef<HTMLDivElement, XenKeyboardProps>(
       };
     }, []);
 
-    // --- Global belt-and-suspenders: stop iOS/Android long-press, pinch, etc. -
-    useEffect(() => {
-      const prevent = (e: Event) => e.preventDefault();
+    // --- Scope UA-behavior suppression to the keyboard root only --------------
+    const rootRef = useRef<HTMLDivElement | null>(null);
 
-      // iOS Safari gesture events
-      document.addEventListener("gesturestart", prevent, { passive: false });
-      document.addEventListener("gesturechange", prevent, { passive: false });
-      document.addEventListener("gestureend", prevent, { passive: false });
+    // Merge forwarded ref with our internal ref
+    useEffect(() => {
+      if (!ref) return;
+      if (typeof ref === "function") {
+        ref(rootRef.current);
+      } else {
+        (ref as React.MutableRefObject<HTMLDivElement | null>).current = rootRef.current;
+      }
+    }, [ref]);
+
+    useEffect(() => {
+      const el = rootRef.current;
+      if (!el) return;
+
+      const prevent = (e: Event) => e.preventDefault();
+      const opts = { passive: false } as AddEventListenerOptions;
+
+      // iOS Safari gesture events (pinch/double-tap)
+      el.addEventListener("gesturestart", prevent as EventListener, opts);
+      el.addEventListener("gesturechange", prevent as EventListener, opts);
+      el.addEventListener("gestureend", prevent as EventListener, opts);
 
       // Legacy touch scroll/zoom prevention
-      const opts = { passive: false } as AddEventListenerOptions;
-      document.addEventListener("touchstart", prevent, opts);
-      document.addEventListener("touchmove", prevent, opts);
-      document.addEventListener("touchend", prevent, opts);
+      el.addEventListener("touchstart", prevent, opts);
+      el.addEventListener("touchmove", prevent, opts);
+      el.addEventListener("touchend", prevent, opts);
 
       // Long-press context menus (Android/desktop)
-      document.addEventListener("contextmenu", prevent);
+      el.addEventListener("contextmenu", prevent as EventListener);
 
       return () => {
-        document.removeEventListener("gesturestart", prevent as any);
-        document.removeEventListener("gesturechange", prevent as any);
-        document.removeEventListener("gestureend", prevent as any);
-        document.removeEventListener("touchstart", prevent as any);
-        document.removeEventListener("touchmove", prevent as any);
-        document.removeEventListener("touchend", prevent as any);
-        document.removeEventListener("contextmenu", prevent as any);
+        el.removeEventListener("gesturestart", prevent as EventListener);
+        el.removeEventListener("gesturechange", prevent as EventListener);
+        el.removeEventListener("gestureend", prevent as EventListener);
+
+        el.removeEventListener("touchstart", prevent as EventListener);
+        el.removeEventListener("touchmove", prevent as EventListener);
+        el.removeEventListener("touchend", prevent as EventListener);
+
+        el.removeEventListener("contextmenu", prevent as EventListener);
       };
     }, []);
 
@@ -256,7 +273,7 @@ export default forwardRef<HTMLDivElement, XenKeyboardProps>(
       <Div
         width={width}
         height={height}
-        ref={ref}
+        ref={rootRef}
         position="absolute"
         top={topString}
         left={leftString}
