@@ -22,8 +22,8 @@ const keyDeclarations: Array<KeyDeclaration> = [
   }, // C
   {
     offsets: [0, 1, 0],
-    divisions: 6,
-    microStepOffset: postAddMicroSteps(6),
+    divisions: 2,
+    microStepOffset: postAddMicroSteps(2),
     classIndex: 1,
   }, // C#
   {
@@ -34,8 +34,8 @@ const keyDeclarations: Array<KeyDeclaration> = [
   }, // D
   {
     offsets: [1, 1, 0],
-    divisions: 6,
-    microStepOffset: postAddMicroSteps(6),
+    divisions: 2,
+    microStepOffset: postAddMicroSteps(2),
     classIndex: 1,
   }, // D#
   {
@@ -46,8 +46,8 @@ const keyDeclarations: Array<KeyDeclaration> = [
   }, // E
   {
     offsets: [2, 1, 0],
-    divisions: 2,
-    microStepOffset: postAddMicroSteps(2),
+    divisions: 1,
+    microStepOffset: postAddMicroSteps(1),
     classIndex: 2,
   }, // EF-Gap Purple
   {
@@ -58,8 +58,8 @@ const keyDeclarations: Array<KeyDeclaration> = [
   }, // F
   {
     offsets: [3, 1, 0],
-    divisions: 6,
-    microStepOffset: postAddMicroSteps(6),
+    divisions: 2,
+    microStepOffset: postAddMicroSteps(2),
     classIndex: 1,
   }, // F#
   {
@@ -70,8 +70,8 @@ const keyDeclarations: Array<KeyDeclaration> = [
   }, // G
   {
     offsets: [4, 1, 0],
-    divisions: 6,
-    microStepOffset: postAddMicroSteps(6),
+    divisions: 2,
+    microStepOffset: postAddMicroSteps(2),
     classIndex: 1,
   }, // G#
   {
@@ -82,8 +82,8 @@ const keyDeclarations: Array<KeyDeclaration> = [
   }, // A
   {
     offsets: [5, 1, 0],
-    divisions: 6,
-    microStepOffset: postAddMicroSteps(6),
+    divisions: 2,
+    microStepOffset: postAddMicroSteps(2),
     classIndex: 1,
   }, // A#
   {
@@ -94,14 +94,14 @@ const keyDeclarations: Array<KeyDeclaration> = [
   }, // B
   {
     offsets: [6, 1, 0],
-    divisions: 2,
-    microStepOffset: postAddMicroSteps(2),
+    divisions: 1,
+    microStepOffset: postAddMicroSteps(1),
     classIndex: 2,
   }, // BC-Gap Purple Key, will hang partly off-octave-rectangle
   // Todo: add better logic for z-index when we have multiple octaves
 ];
 
-export function make41EDO(
+export function make19EDO(
   whiteKeyAppearance = {
     baseColor: "hsl(0, 0%, 100%)",
     pressedColor: "hsl(0, 0%, 65%)",
@@ -157,13 +157,12 @@ export function make41EDO(
   return {
     keyClasses,
     keyDeclarations,
-    totalEDO: 41,
+    totalEDO: 19,
     C4Frequency: getBaseFrequencyC(
       440,
-      41,
+      19,
       4,
-
-      6 + 1 + 2 + 1
+      4
     ),
   };
 }
