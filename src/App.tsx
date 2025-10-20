@@ -119,40 +119,43 @@ function App() {
 
   useEffect(() => {
     if (bodyWidth > 0 && bodyHeight > 0) {
-      const aspect = bodyWidth / bodyHeight;
-      let rows = 1;
-      let cols = 1;
-      let initStartingOctave = 4;
+      // const aspect = bodyWidth / bodyHeight;
+      // let rows = 1;
+      // let cols = 1;
+      // let initStartingOctave = 4;
 
-      if (aspect < 0.8) {
-        // Mobile portrait
-        rows = 2;
-        cols = 1;
-        initStartingOctave = 4;
-      } else if (aspect < 1.2) {
-        // iPad portrait
-        rows = 2;
-        cols = 1;
-        initStartingOctave = 3;
-      } else if (aspect < 1.8) {
-        // iPad landscape / standard screens
-        rows = 1;
-        cols = 2;
-        initStartingOctave = 3;
-      } else if (aspect < 2.5) {
-        // widescreen laptops
-        rows = 1;
-        cols = 4;
-        initStartingOctave = 2;
-      } else {
-        // ultrawide monitors
-        rows = 1;
-        cols = 6;
-        initStartingOctave = 1;
-      }
-      setStartingOctave(initStartingOctave);
-      setOctaveRows(rows);
-      setOctaveCols(cols);
+      // if (aspect < 0.8) {
+      //   // Mobile portrait
+      //   rows = 2;
+      //   cols = 1;
+      //   initStartingOctave = 4;
+      // } else if (aspect < 1.2) {
+      //   // iPad portrait
+      //   rows = 2;
+      //   cols = 1;
+      //   initStartingOctave = 3;
+      // } else if (aspect < 1.8) {
+      //   // iPad landscape / standard screens
+      //   rows = 1;
+      //   cols = 2;
+      //   initStartingOctave = 3;
+      // } else if (aspect < 2.5) {
+      //   // widescreen laptops
+      //   rows = 1;
+      //   cols = 4;
+      //   initStartingOctave = 2;
+      // } else {
+      //   // ultrawide monitors
+      //   rows = 1;
+      //   cols = 6;
+      //   initStartingOctave = 1;
+      // }
+      // setStartingOctave(initStartingOctave);
+      // setOctaveRows(rows);
+      // setOctaveCols(cols);
+      setOctaveRows(1)
+      setOctaveCols(2)
+      setStartingOctave(4)
     }
   }, [bodyWidth, bodyHeight]);
 
