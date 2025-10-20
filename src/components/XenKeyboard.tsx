@@ -1,5 +1,5 @@
 import { css } from "@emotion/react";
-import { forwardRef, useEffect, useMemo, useRef } from "react";
+import React, { forwardRef, useEffect, useMemo, useRef } from "react";
 import { Div, type DivProps } from "style-props-html";
 
 import type XenOctaveDisplayManifest from "../types/XenOctaveDisplayManifest";
@@ -43,6 +43,11 @@ function setPressedAttr(el: Element | null, pressed: boolean) {
 function hitTestSubKey(clientX: number, clientY: number): HTMLElement | null {
   const el = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
   return el?.closest('[data-xen-subkey="true"]') as HTMLElement | null;
+}
+
+// Guard for primary activation: allow touch OR primary mouse button
+function isPrimaryActivation(e: React.PointerEvent) {
+  return e.pointerType === "touch" || (e.pointerType === "mouse" && e.button === 0);
 }
 
 type PointerRec = {
@@ -126,6 +131,35 @@ export default forwardRef<HTMLDivElement, XenKeyboardProps>(
       };
     }, []);
 
+    // --- Global belt-and-suspenders: stop iOS/Android long-press, pinch, etc. -
+    useEffect(() => {
+      const prevent = (e: Event) => e.preventDefault();
+
+      // iOS Safari gesture events
+      document.addEventListener("gesturestart", prevent, { passive: false });
+      document.addEventListener("gesturechange", prevent, { passive: false });
+      document.addEventListener("gestureend", prevent, { passive: false });
+
+      // Legacy touch scroll/zoom prevention
+      const opts = { passive: false } as AddEventListenerOptions;
+      document.addEventListener("touchstart", prevent, opts);
+      document.addEventListener("touchmove", prevent, opts);
+      document.addEventListener("touchend", prevent, opts);
+
+      // Long-press context menus (Android/desktop)
+      document.addEventListener("contextmenu", prevent);
+
+      return () => {
+        document.removeEventListener("gesturestart", prevent as any);
+        document.removeEventListener("gesturechange", prevent as any);
+        document.removeEventListener("gestureend", prevent as any);
+        document.removeEventListener("touchstart", prevent as any);
+        document.removeEventListener("touchmove", prevent as any);
+        document.removeEventListener("touchend", prevent as any);
+        document.removeEventListener("contextmenu", prevent as any);
+      };
+    }, []);
+
     // --- Helpers to read data-* off a subkey and compute pitch ----------------
     function getIdsAndPitchFromSubKey(el: HTMLElement) {
       const pid = Number(el.dataset.pitchId);
@@ -135,30 +169,10 @@ export default forwardRef<HTMLDivElement, XenKeyboardProps>(
     }
 
     // --- Pointer handlers ------------------------------------------------------
-
-    // function handlePointerDown(e: React.PointerEvent<HTMLElement>) {
-    //   // All interactive keys carry data-xen-subkey="true".
-    //   // We rely on that instead of any specific component variables.
-    //   e.preventDefault();
-    //   const keyEl = e.currentTarget as HTMLElement;
-
-    //   // Initial capture on the pressed key (per pointerId, allows multitouch)
-    //   keyEl.setPointerCapture(e.pointerId);
-
-    //   const { pitchId, pitch } = getIdsAndPitchFromSubKey(keyEl);
-
-    //   setPressedAttr(keyEl, true);
-    //   onIdPress(pitchId, pitch);
-
-    //   activePointersRef.current.set(e.pointerId, {
-    //     captureEl: keyEl,
-    //     currentKeyEl: keyEl,
-    //     pitchId,
-    //     pitch,
-    //   });
-    // }
-
     function handlePointerMove(e: React.PointerEvent<HTMLElement>) {
+      // Only react to touch/mouse pointers
+      if (!(e.pointerType === "touch" || e.pointerType === "mouse")) return;
+
       const rec = activePointersRef.current.get(e.pointerId);
       if (!rec) return;
 
@@ -215,6 +229,8 @@ export default forwardRef<HTMLDivElement, XenKeyboardProps>(
     }
 
     function endPointer(e: React.PointerEvent<HTMLElement>) {
+      if (!(e.pointerType === "touch" || e.pointerType === "mouse")) return;
+
       const rec = activePointersRef.current.get(e.pointerId);
       if (!rec) return;
 
@@ -245,13 +261,15 @@ export default forwardRef<HTMLDivElement, XenKeyboardProps>(
         top={topString}
         left={leftString}
         overflow="visible"
+        onContextMenu={(e) => e.preventDefault()}
         css={css`
           touch-action: none; /* we fully handle gestures */
           user-select: none;
-          /* Remove or customize the mobile tap flash */
+          -webkit-user-select: none;   /* iOS Safari */
+          -ms-user-select: none;       /* old Edge */
           -webkit-tap-highlight-color: transparent; /* or rgba(0,0,0,.1) to match theme */
-          /* Optional: prevent iOS long-press actions on keys */
-          -webkit-touch-callout: none;
+          -webkit-touch-callout: none; /* iOS long-press callout */
+          overscroll-behavior: contain; /* stop pull-to-refresh / scroll chaining */
         `}
         {...rest}
       >
@@ -313,9 +331,12 @@ export default forwardRef<HTMLDivElement, XenKeyboardProps>(
                     data-xen-subkey="true"
                     data-pitch-id={globalPitchId}
                     data-in-octave={inOctaveMicrotone}
-                    role="button"
-                    aria-label={`Key ${globalPitchId}`}
-                    tabIndex={0}
+                    // No keyboard activation: debugging via mouse is still allowed
+                    // by pointer events; omit tab focus
+                    // role removed to avoid implying keyboard activation
+                    // role="button"
+                    // aria-label={`Key ${globalPitchId}`}
+                    draggable={false}
                     position="absolute"
                     top={`${verticalPosition}px`}
                     left="0px"
@@ -328,6 +349,11 @@ export default forwardRef<HTMLDivElement, XenKeyboardProps>(
                     cursor="pointer"
                     css={css`
                       touch-action: none;
+                      user-select: none;
+                      -webkit-user-select: none;
+                      -ms-user-select: none;
+                      -webkit-touch-callout: none;
+                      -webkit-tap-highlight-color: transparent;
                       background-color: ${keyClass.baseColor};
 
                       /* pressed/touched state */
@@ -335,30 +361,15 @@ export default forwardRef<HTMLDivElement, XenKeyboardProps>(
                         background-color: ${keyClass.pressedColor};
                       }
 
-                      /* Keyboard-visible focus style only */
-                      &:focus-visible {
-                        outline: none; /* remove UA outline */
-                        box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.3) inset;
-                      }
-
-                      /* Suppress non-keyboard focus rings (e.g., tap focus) */
-                      &:focus:not(:focus-visible) {
+                      /* Suppress focus rings entirely since no keyboard use */
+                      &:focus {
                         outline: none;
                         box-shadow: none;
                       }
-
-                      /* Extra guard */
-                      &:focus {
-                        outline: none;
-                      }
-
-                      /* Prevent blue/gray flash on individual keys as well (belt & suspenders) */
-                      -webkit-tap-highlight-color: transparent;
                     `}
                     // Pointer Events: unified + glissando
                     onPointerDown={(e) => {
-                      // Use the precomputed pitch for the initial key
-                      // (same as what getIdsAndPitchFromSubKey would compute).
+                      if (!isPrimaryActivation(e)) return; // allow touch or primary mouse only
                       e.preventDefault();
                       const keyEl = e.currentTarget as HTMLElement;
                       keyEl.setPointerCapture(e.pointerId);
@@ -375,21 +386,6 @@ export default forwardRef<HTMLDivElement, XenKeyboardProps>(
                     onPointerUp={endPointer}
                     onPointerCancel={endPointer}
                     onLostPointerCapture={endPointer}
-                    // Optional keyboard activation
-                    onKeyDown={(e) => {
-                      if (e.key === " " || e.key === "Enter") {
-                        const el = e.currentTarget as HTMLElement;
-                        setPressedAttr(el, true);
-                        onIdPress(globalPitchId, initialPitch);
-                      }
-                    }}
-                    onKeyUp={(e) => {
-                      if (e.key === " " || e.key === "Enter") {
-                        const el = e.currentTarget as HTMLElement;
-                        setPressedAttr(el, false);
-                        onIdRelease(globalPitchId);
-                      }
-                    }}
                   />
                 );
               })}
