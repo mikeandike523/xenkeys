@@ -132,11 +132,11 @@ function App() {
       } else if (aspect < 1.2) {
         // iPad portrait
         rows = 2;
-        cols = 2;
+        cols = 1;
         initStartingOctave = 3;
       } else if (aspect < 1.8) {
         // iPad landscape / standard screens
-        rows = 2;
+        rows = 1;
         cols = 2;
         initStartingOctave = 3;
       } else if (aspect < 2.5) {
