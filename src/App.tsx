@@ -23,6 +23,7 @@ import XenKeyboard from "./components/XenKeyboard";
 import type { Waveform, Envelope } from "./shared-types/audio-engine";
 import Synth from "./audio/synth";
 import { make12EDO } from "./data/edo-presets/12edo";
+import { make22EDO } from "./data/edo-presets/22edo";
 import { make19EDO } from "./data/edo-presets/19edo";
 import { make24EDO } from "./data/edo-presets/24edo";
 import { make31EDO } from "./data/edo-presets/31edo";
@@ -34,6 +35,7 @@ import iota from "./utils/algorithms/iota";
 
 const default12EdoManifest = make12EDO();
 const default19EdoManifest = make19EDO();
+const default22EdoManifest = make22EDO();
 const default24EdoManifest = make24EDO();
 const default31EdoManifest = make31EDO();
 const default36EdoManifest = make36EDO();
@@ -43,6 +45,7 @@ const default48EdoManifest = make48EDO();
 const manifestPresets = {
   "12edo": default12EdoManifest,
   "19edo": default19EdoManifest,
+  "22edo": default22EdoManifest,
   "24edo": default24EdoManifest,
   "31edo": default31EdoManifest,
   "36edo": default36EdoManifest,
@@ -131,40 +134,7 @@ function App() {
 
   useEffect(() => {
     if (bodyWidth > 0 && bodyHeight > 0) {
-      // const aspect = bodyWidth / bodyHeight;
-      // let rows = 1;
-      // let cols = 1;
-      // let initStartingOctave = 4;
-
-      // if (aspect < 0.8) {
-      //   // Mobile portrait
-      //   rows = 2;
-      //   cols = 1;
-      //   initStartingOctave = 4;
-      // } else if (aspect < 1.2) {
-      //   // iPad portrait
-      //   rows = 2;
-      //   cols = 1;
-      //   initStartingOctave = 3;
-      // } else if (aspect < 1.8) {
-      //   // iPad landscape / standard screens
-      //   rows = 1;
-      //   cols = 2;
-      //   initStartingOctave = 3;
-      // } else if (aspect < 2.5) {
-      //   // widescreen laptops
-      //   rows = 1;
-      //   cols = 4;
-      //   initStartingOctave = 2;
-      // } else {
-      //   // ultrawide monitors
-      //   rows = 1;
-      //   cols = 6;
-      //   initStartingOctave = 1;
-      // }
-      // setStartingOctave(initStartingOctave);
-      // setOctaveRows(rows);
-      // setOctaveCols(cols);
+      // Todo: measure intelligently based on aspect
       setOctaveRows(1)
       setOctaveCols(2)
       setStartingOctave(4)
