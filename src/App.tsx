@@ -25,17 +25,20 @@ import Synth from "./audio/synth";
 import { make12EDO } from "./data/edo-presets/12edo";
 import { make24EDO } from "./data/edo-presets/24edo";
 import { make31EDO } from "./data/edo-presets/31edo";
+import { make41EDO } from "./data/edo-presets/41edo";
 import type XenOctaveDisplayManifest from "./types/XenOctaveDisplayManifest";
 import iota from "./utils/algorithms/iota";
 
 const default12EdoManifest = make12EDO();
 const default24EdoManifest = make24EDO();
 const default31EdoManifest = make31EDO();
+const default41EdoManifest = make41EDO();
 
 const manifestPresets = {
   "12edo": default12EdoManifest,
   "24edo": default24EdoManifest,
   "31edo": default31EdoManifest,
+  "41edo": default41EdoManifest,
 };
 
 function MultiOctaveDisplay({
