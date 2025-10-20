@@ -16,7 +16,7 @@ const postAddMicroSteps = (amt: number) => {
 const keyDeclarations: Array<KeyDeclaration> = [
   {
     offsets: [0, 0, 0],
-    divisions: 1,
+    divisions: 2,
     microStepOffset: postAddMicroSteps(2),
     classIndex: 0,
   }, // C
