@@ -165,7 +165,7 @@ export function make22EDO(
       22,
       4,
 
-      1 + 2 + 1 + 1
+      1 + 2 + 1 + 1 + 1
     ),
   };
 }
