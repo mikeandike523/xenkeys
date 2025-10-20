@@ -219,13 +219,7 @@ function App() {
   }, [synth]);
 
   const [headerCollapsed, setHeaderCollapsed] = useState(false);
-  const toggleFullScreen = useCallback(() => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(console.error);
-    } else {
-      document.exitFullscreen().catch(console.error);
-    }
-  }, []);
+
 
   return (
     <>
@@ -375,11 +369,7 @@ function App() {
               </Button>
             </Div>
           )}
-          <Div marginLeft="auto" display="flex" alignItems="center">
-            <Button onClick={toggleFullScreen} padding="0.5rem">
-              ⛶
-            </Button>
-          </Div>
+
         </Header>
       )}
       <Main
