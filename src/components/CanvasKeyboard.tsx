@@ -300,6 +300,15 @@ export default forwardRef<HTMLDivElement, CanvasKeyboardProps>(function CanvasKe
   useEffect(() => {
     redraw();
   }, [redraw]);
+  // Ensure the canvas backing store matches the displayed size for crisp drawing
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    redraw();
+  }, [width, height, redraw]);
 
   // Pointer event handlers
   const handlePointerDown = (e: React.PointerEvent) => {
