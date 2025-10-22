@@ -380,7 +380,7 @@ export default forwardRef<HTMLDivElement, CanvasKeyboardProps>(function CanvasKe
   return (
     <Div
       ref={rootRef}
-      position="absolute"
+      position="relative"
       top={topPos}
       left={leftPos}
       width={width}
