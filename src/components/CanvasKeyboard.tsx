@@ -40,7 +40,6 @@ function drawKeyboard(
   startingOctave: number,
   octaveCount: number,
   pressedKeys: Set<number>,
-  pressAnimationDuration?: number
 ) {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
@@ -266,8 +265,7 @@ export default forwardRef<HTMLDivElement, CanvasKeyboardProps>(function CanvasKe
           manifest,
           startingOctave,
           octaveCount,
-          pressedKeys.current,
-          pressAnimationDuration
+          pressedKeys.current
         );
       }
     };
@@ -292,8 +290,7 @@ export default forwardRef<HTMLDivElement, CanvasKeyboardProps>(function CanvasKe
       manifest,
       startingOctave,
       octaveCount,
-      pressedKeys.current,
-      pressAnimationDuration
+      pressedKeys.current
     );
   }, [manifest, startingOctave, octaveCount, pressAnimationDuration]);
 
