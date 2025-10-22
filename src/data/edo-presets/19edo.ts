@@ -6,6 +6,7 @@ import type {
 
 import getBaseFrequencyC from "../../utils/music-theory/getBaseFrequency";
 import { blackToWhiteWidthRatio, blackToWhiteLengthRatio } from "../piano-key-dimensions";
+import { defaultWhiteKeyAppearance, defaultBlackKeyAppearance, defaultPurpleKeyAppearance } from "../color-presets";
 
 let microStepPointer = 0;
 
@@ -103,24 +104,9 @@ const keyDeclarations: Array<KeyDeclaration> = [
 ];
 
 export function make19EDO(
-  whiteKeyAppearance = {
-    baseColor: "hsl(0, 0%, 100%)",
-    pressedColor: "hsl(0, 0%, 65%)",
-    outlineColor: "hsl(0, 0%, 50%)",
-    outlineThickness: 3,
-  },
-  blackKeyAppearance = {
-    baseColor: "hsl(0, 0%, 0%)",
-    pressedColor: "hsl(0, 0%, 30%)",
-    outlineColor: "hsl(0, 0%, 50%)",
-    outlineThickness: 3,
-  },
-  purpleKeyAppearance = {
-    baseColor: "hsl(240, 100%, 50%)",
-    pressedColor: "hsl(240, 100%, 40%)",
-    outlineColor: "hsl(240, 100%, 30%)",
-    outlineThickness: 3,
-  },
+  whiteKeyAppearance = defaultWhiteKeyAppearance,
+  blackKeyAppearance = defaultBlackKeyAppearance,
+  purpleKeyAppearance = defaultPurpleKeyAppearance,
   blackKeyWidthToWhiteKeyWidthRatio = blackToWhiteWidthRatio,
   purpleKeyWidthToBlackKeyWidthRatio = blackToWhiteWidthRatio,
   blackKeyHeight = blackToWhiteLengthRatio,
