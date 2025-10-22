@@ -19,6 +19,7 @@ import {
 import "./App.css";
 import { useElementRefBySelector } from "./hooks/fwk/useElementRefBySelector";
 import { useElementSize } from "./hooks/fwk/useElementSize";
+import { usePersistentState } from "./hooks/fwk/usePersistentState";
 
 import CanvasKeyboard from "./components/CanvasKeyboard";
 import { NumberStepper } from "./components/NumberStepper";
@@ -54,6 +55,12 @@ const manifestPresets = {
   "48edo": default48EdoManifest,
 };
 
+const defaultEnvelope: Envelope = {
+  attack: 0.01,
+  decay: 0.1,
+  sustain: 0.7,
+  release: 0.5,
+};
 
 function App() {
   const bodyRef = useElementRefBySelector<HTMLBodyElement>("body");
@@ -70,25 +77,55 @@ function App() {
 
   const cpanelHeight = cpanelRefSize?.height || 0;
 
-  const [manifestName, setManifestName] =
-    useState<keyof typeof manifestPresets>("12edo");
-  const [waveform, setWaveform] = useState<Waveform>("sine");
-  const [envelope, setEnvelope] = useState<Envelope>({
-    attack: 0.01,
-    decay: 0.1,
-    sustain: 0.7,
-    release: 0.5,
-  });
+  const [manifestName, setManifestName, resetManifestName] =
+    usePersistentState<keyof typeof manifestPresets>("manifestName", "12edo");
+  const [waveform, setWaveform, resetWaveform] = usePersistentState<Waveform>(
+    "waveform",
+    "sine"
+  );
+  const [envelope, setEnvelope, resetEnvelope] = usePersistentState<Envelope>(
+    "envelope",
+    defaultEnvelope
+  );
   const [synth, setSynth] = useState<Synth | null>(null);
   const [started, setStarted] = useState(false);
-  const [startingOctave, setStartingOctave] = useState<number>(4);
-  const [octaveCount, setOctaveCount] = useState<number>(2);
+  const [startingOctave, setStartingOctave, resetStartingOctave] =
+    usePersistentState<number>("startingOctave", 4);
+  const [octaveCount, setOctaveCount, resetOctaveCount] =
+    usePersistentState<number>("octaveCount", 2);
+
+  const [
+    headerCollapsed,
+    setHeaderCollapsed,
+    resetHeaderCollapsed,
+  ] = usePersistentState<boolean>("headerCollapsed", false);
+
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+  const handleResetSettings = useCallback(() => {
+    resetManifestName();
+    resetWaveform();
+    resetEnvelope();
+    resetStartingOctave();
+    resetOctaveCount();
+    resetHeaderCollapsed();
+    setShowResetConfirm(false);
+  }, [
+    resetManifestName,
+    resetWaveform,
+    resetEnvelope,
+    resetStartingOctave,
+    resetOctaveCount,
+    resetHeaderCollapsed,
+  ]);
 
   useEffect(() => {
     if (bodyWidth > 0 && bodyHeight > 0) {
       // initialize with a default number of octaves and starting octave
-      setOctaveCount(2);
-      setStartingOctave(4);
+      // This effect might not be needed anymore if persistent state is desired on first load
+      // but keeping it in case the logic is to resize based on window size initially.
+      // setOctaveCount(2);
+      // setStartingOctave(4);
     }
   }, [bodyWidth, bodyHeight]);
 
@@ -139,8 +176,6 @@ function App() {
     setStarted(true);
   }, [synth]);
 
-  const [headerCollapsed, setHeaderCollapsed] = useState(false);
-
   const octaveAspect = 7 * whiteKeyAspect;
 
   const targetKeyboardAspect = octaveAspect * (octaveCount ?? 1);
@@ -184,6 +219,9 @@ function App() {
         >
           <Button onClick={() => setHeaderCollapsed(true)} padding="0.5rem">
             ☰
+          </Button>
+          <Button onClick={() => setShowResetConfirm(true)} padding="0.5rem">
+            Reset
           </Button>
           <Select
             value={manifestName}
@@ -322,6 +360,39 @@ function App() {
       {!started && (
         <div className="audio-modal" onClick={handleStart}>
           <span>Click to Start Audio</span>
+        </div>
+      )}
+      {showResetConfirm && (
+        <div className="audio-modal">
+          <Div
+            background="white"
+            padding="2rem"
+            borderRadius="0.5rem"
+            display="flex"
+            flexDirection="column"
+            gap="1rem"
+            alignItems="center"
+          >
+            <Span>Reset all settings to their defaults?</Span>
+            <Div display="flex" gap="1rem">
+              <Button
+                onClick={handleResetSettings}
+                background="red"
+                color="white"
+                padding="0.5rem 1rem"
+              >
+                Confirm
+              </Button>
+              <Button
+                onClick={() => setShowResetConfirm(false)}
+                background="grey"
+                color="white"
+                padding="0.5rem 1rem"
+              >
+                Cancel
+              </Button>
+            </Div>
+          </Div>
         </div>
       )}
     </>
