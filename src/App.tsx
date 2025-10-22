@@ -19,7 +19,7 @@ import "./App.css";
 import { useElementRefBySelector } from "./hooks/fwk/useElementRefBySelector";
 import { useElementSize } from "./hooks/fwk/useElementSize";
 
-import XenKeyboard from "./components/XenKeyboard";
+import CanvasKeyboard from "./components/CanvasKeyboard";
 import type { Waveform, Envelope } from "./shared-types/audio-engine";
 import Synth from "./audio/synth";
 import { make12EDO } from "./data/edo-presets/12edo";
@@ -30,8 +30,6 @@ import { make31EDO } from "./data/edo-presets/31edo";
 import { make36EDO } from "./data/edo-presets/36edo";
 import { make41EDO } from "./data/edo-presets/41edo";
 import { make48EDO } from "./data/edo-presets/48edo";
-import type XenOctaveDisplayManifest from "./types/XenOctaveDisplayManifest";
-import iota from "./utils/algorithms/iota";
 import { whiteKeyAspect } from "./data/piano-key-dimensions";
 
 const default12EdoManifest = make12EDO();
@@ -54,61 +52,6 @@ const manifestPresets = {
   "48edo": default48EdoManifest,
 };
 
-function MultiOctaveDisplay({
-  manifest,
-  width,
-  height,
-  rows,
-  cols,
-  startingOctave,
-  onIdPress,
-  onIdRelease,
-}: {
-  manifest: XenOctaveDisplayManifest;
-  width: number;
-  height: number;
-  rows: number;
-  cols: number;
-  startingOctave: number;
-  onIdPress: (pitchId: number, pitch: number) => void;
-  onIdRelease: (pitchId: number) => void;
-}) {
-  const octaveWidth = width / cols;
-  const octaveHeight = height / rows;
-  return (
-    <Div
-    width={`${width}px`}
-    height={`${height}px`}
-    position="relative"
-    >
-      {iota(rows).map((row) => {
-        return iota(cols).map((col) => {
-          const startX = col * octaveWidth;
-          const startY = row * octaveHeight;
-          const octaveNumber = startingOctave + (rows - 1 - row) * cols + col;
-          const reactKey = `octave-${octaveNumber}`;
-          // Lower octave above higher octave to account for partially overflowing keys
-          const zIndex = cols - 1 - col;
-          return (
-            <Div key={reactKey}>
-              <XenKeyboard
-                zIndex={zIndex}
-                width={octaveWidth}
-                height={octaveHeight}
-                manifest={manifest}
-                top={startY}
-                left={startX}
-                octaveNumber={octaveNumber}
-                onIdPress={onIdPress}
-                onIdRelease={onIdRelease}
-              />
-            </Div>
-          );
-        });
-      })}
-    </Div>
-  );
-}
 
 function App() {
   const bodyRef = useElementRefBySelector<HTMLBodyElement>("body");
@@ -137,15 +80,12 @@ function App() {
   const [synth, setSynth] = useState<Synth | null>(null);
   const [started, setStarted] = useState(false);
   const [startingOctave, setStartingOctave] = useState<number | null>(null);
-
-  const [octaveRows, setOctaveRows] = useState<number | null>(null);
-  const [octaveCols, setOctaveCols] = useState<number | null>(null);
+  const [octaveCount, setOctaveCount] = useState<number | null>(null);
 
   useEffect(() => {
     if (bodyWidth > 0 && bodyHeight > 0) {
-      // Todo: measure intelligently based on aspect
-      setOctaveRows(1);
-      setOctaveCols(2);
+      // initialize with a default number of octaves and starting octave
+      setOctaveCount(2);
       setStartingOctave(4);
     }
   }, [bodyWidth, bodyHeight]);
@@ -201,8 +141,7 @@ function App() {
 
   const octaveAspect = 7 * whiteKeyAspect;
 
-  const targetKeyboardAspect =
-    (octaveAspect * (octaveCols ?? 2)) / (octaveRows ?? 1);
+  const targetKeyboardAspect = octaveAspect * (octaveCount ?? 1);
 
   let targetKeyboardWidth = currentPlayAreaWidth;
 
@@ -337,28 +276,24 @@ function App() {
             />
           </label>
           {startingOctave !== null && (
-            <Div
-              display="flex"
-              flexDirection="row"
-              alignItems="center"
-              gap="0.5rem"
-            >
-              <Span color="white">Oct:</Span>
-              <Button
-                onClick={() => {
-                  setStartingOctave(startingOctave - 1);
-                }}
-              >
-                &lt;
-              </Button>
+            <Div display="flex" flexDirection="row" alignItems="center" gap="0.5rem">
+              <Span color="white">Oct Start:</Span>
+              <Button onClick={() => setStartingOctave(startingOctave - 1)}>&lt;</Button>
               <Span color="white">{startingOctave}</Span>
-              <Button
-                onClick={() => {
-                  setStartingOctave(startingOctave + 1);
-                }}
-              >
-                &gt;
-              </Button>
+              <Button onClick={() => setStartingOctave(startingOctave + 1)}>&gt;</Button>
+            </Div>
+          )}
+          {octaveCount !== null && (
+            <Div display="flex" flexDirection="row" alignItems="center" gap="0.5rem">
+              <Span color="white">Octaves:</Span>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                value={octaveCount}
+                onChange={(e) => setOctaveCount(parseInt(e.target.value) || 1)}
+                style={{ width: "3rem", marginLeft: "0.25rem" }}
+              />
             </Div>
           )}
         </Header>
@@ -378,14 +313,12 @@ function App() {
       >
         {currentPlayAreaHeight > 0 &&
           currentPlayAreaWidth > 0 &&
-          octaveRows &&
-          octaveCols &&
+          octaveCount &&
           startingOctave !== null && (
-            <MultiOctaveDisplay
+            <CanvasKeyboard
               manifest={manifest}
-              rows={octaveRows}
-              cols={octaveCols}
               startingOctave={startingOctave}
+              octaveCount={octaveCount}
               onIdPress={onIdPress}
               onIdRelease={onIdRelease}
               width={targetKeyboardWidth}
