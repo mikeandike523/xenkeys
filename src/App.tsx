@@ -94,12 +94,6 @@ function App() {
   const [octaveCount, setOctaveCount, resetOctaveCount] =
     usePersistentState<number>("octaveCount", 2);
 
-  const [
-    headerCollapsed,
-    setHeaderCollapsed,
-    resetHeaderCollapsed,
-  ] = usePersistentState<boolean>("headerCollapsed", false);
-
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   const handleResetSettings = useCallback(() => {
@@ -108,7 +102,6 @@ function App() {
     resetEnvelope();
     resetStartingOctave();
     resetOctaveCount();
-    resetHeaderCollapsed();
     setShowResetConfirm(false);
   }, [
     resetManifestName,
@@ -116,7 +109,6 @@ function App() {
     resetEnvelope,
     resetStartingOctave,
     resetOctaveCount,
-    resetHeaderCollapsed,
   ]);
 
   useEffect(() => {
@@ -191,144 +183,126 @@ function App() {
 
   return (
     <>
-      {headerCollapsed ? (
-        <Button
-          position="fixed"
-          top="0.5rem"
-          left="0.5rem"
-          background="teal"
-          color="white"
-          padding="0.5rem"
-          zIndex={9999}
-          onClick={() => setHeaderCollapsed(false)}
-        >
-          ☰
+      <Header
+        width="100%"
+        ref={cpanelRef}
+        //  For debugging
+        background="teal"
+        padding="0.5rem"
+        display="flex"
+        flexDirection="row"
+        alignItems="center"
+        overflowX="auto"
+        gap="0.5rem"
+      >
+        <Button onClick={() => setShowResetConfirm(true)} padding="0.5rem">
+          Reset
         </Button>
-      ) : (
-        <Header
-          width="100%"
-          ref={cpanelRef}
-          //  For debugging
-          background="teal"
-          padding="0.5rem"
-          display="flex"
-          flexDirection="row"
-          alignItems="center"
-          overflowX="auto"
-          gap="0.5rem"
+        <Select
+          value={manifestName}
+          onChange={(e: ChangeEvent<HTMLSelectElement>) => {
+            setManifestName(e.target.value as keyof typeof manifestPresets);
+          }}
+          fontSize="2rem"
         >
-          <Button onClick={() => setHeaderCollapsed(true)} padding="0.5rem">
-            ☰
-          </Button>
-          <Button onClick={() => setShowResetConfirm(true)} padding="0.5rem">
-            Reset
-          </Button>
-          <Select
-            value={manifestName}
-            onChange={(e: ChangeEvent<HTMLSelectElement>) => {
-              setManifestName(e.target.value as keyof typeof manifestPresets);
-            }}
-            fontSize="2rem"
-          >
-            {Object.keys(manifestPresets).map((presetName) => (
-              <Option key={presetName} value={presetName}>
-                {presetName}
-              </Option>
-            ))}
-          </Select>
+          {Object.keys(manifestPresets).map((presetName) => (
+            <Option key={presetName} value={presetName}>
+              {presetName}
+            </Option>
+          ))}
+        </Select>
 
-          <Select
-            value={waveform}
-            onChange={(e: ChangeEvent<HTMLSelectElement>) =>
-              setWaveform(e.target.value as Waveform)
-            }
-            fontSize="2rem"
-          >
-            <Option value="sine">Sine</Option>
-            <Option value="square">Square</Option>
-            <Option value="triangle">Triangle</Option>
-            <Option value="sawtooth">Sawtooth</Option>
-          </Select>
+        <Select
+          value={waveform}
+          onChange={(e: ChangeEvent<HTMLSelectElement>) =>
+            setWaveform(e.target.value as Waveform)
+          }
+          fontSize="2rem"
+        >
+          <Option value="sine">Sine</Option>
+          <Option value="square">Square</Option>
+          <Option value="triangle">Triangle</Option>
+          <Option value="sawtooth">Sawtooth</Option>
+        </Select>
 
-          <label style={{ color: "white" }}>
-            A:
-            <input
-              type="number"
-              min={0}
-              step={0.01}
-              value={envelope.attack}
-              onChange={(e) =>
-                setEnvelope({
-                  ...envelope,
-                  attack: parseFloat(e.target.value) || 0,
-                })
-              }
-              style={{ width: "4rem", marginLeft: "0.25rem" }}
-            />
-          </label>
-          <label style={{ color: "white" }}>
-            D:
-            <input
-              type="number"
-              min={0}
-              step={0.01}
-              value={envelope.decay}
-              onChange={(e) =>
-                setEnvelope({
-                  ...envelope,
-                  decay: parseFloat(e.target.value) || 0,
-                })
-              }
-              style={{ width: "4rem", marginLeft: "0.25rem" }}
-            />
-          </label>
-          <label style={{ color: "white" }}>
-            S:
-            <input
-              type="number"
-              min={0}
-              max={1}
-              step={0.05}
-              value={envelope.sustain}
-              onChange={(e) =>
-                setEnvelope({
-                  ...envelope,
-                  sustain: parseFloat(e.target.value) || 0,
-                })
-              }
-              style={{ width: "4rem", marginLeft: "0.25rem" }}
-            />
-          </label>
-          <label style={{ color: "white" }}>
-            R:
-            <input
-              type="number"
-              min={0}
-              step={0.01}
-              value={envelope.release}
-              onChange={(e) =>
-                setEnvelope({
-                  ...envelope,
-                  release: parseFloat(e.target.value) || 0,
-                })
-              }
-              style={{ width: "4rem", marginLeft: "0.25rem" }}
-            />
-          </label>
-          <NumberStepper
-            label="Oct Start:"
-            value={startingOctave}
-            onChange={setStartingOctave}
+        <label style={{ color: "white" }}>
+          A:
+          <input
+            type="number"
             min={0}
+            step={0.01}
+            value={envelope.attack}
+            onChange={(e) =>
+              setEnvelope({
+                ...envelope,
+                attack: parseFloat(e.target.value) || 0,
+              })
+            }
+            style={{ width: "4rem", marginLeft: "0.25rem" }}
           />
-          <NumberStepper
-            label="Oct Count:"
-            value={octaveCount}
-            onChange={setOctaveCount}
-            min={1}
+        </label>
+        <label style={{ color: "white" }}>
+          D:
+          <input
+            type="number"
+            min={0}
+            step={0.01}
+            value={envelope.decay}
+            onChange={(e) =>
+              setEnvelope({
+                ...envelope,
+                decay: parseFloat(e.target.value) || 0,
+              })
+            }
+            style={{ width: "4rem", marginLeft: "0.25rem" }}
           />
-        </Header>
-      )}
+        </label>
+        <label style={{ color: "white" }}>
+          S:
+          <input
+            type="number"
+            min={0}
+            max={1}
+            step={0.05}
+            value={envelope.sustain}
+            onChange={(e) =>
+              setEnvelope({
+                ...envelope,
+                sustain: parseFloat(e.target.value) || 0,
+              })
+            }
+            style={{ width: "4rem", marginLeft: "0.25rem" }}
+          />
+        </label>
+        <label style={{ color: "white" }}>
+          R:
+          <input
+            type="number"
+            min={0}
+            step={0.01}
+            value={envelope.release}
+            onChange={(e) =>
+              setEnvelope({
+                ...envelope,
+                release: parseFloat(e.target.value) || 0,
+              })
+            }
+            style={{ width: "4rem", marginLeft: "0.25rem" }}
+          />
+        </label>
+        <NumberStepper
+          label="Oct Start:"
+          value={startingOctave}
+          onChange={setStartingOctave}
+          min={0}
+        />
+        <NumberStepper
+          label="Oct Count:"
+          value={octaveCount}
+          onChange={setOctaveCount}
+          min={1}
+        />
+      </Header>
       <Main
         width="100%"
         ref={playAreaRef}
