@@ -126,7 +126,7 @@ export function make22EDO(
   blackKeyWidthToWhiteKeyWidthRatio = blackToWhiteWidthRatio,
   purpleKeyWidthToBlackKeyWidthRatio = blackToWhiteWidthRatio,
   blackKeyHeight = blackToWhiteLengthRatio,
-  purpleKeyHeight = blackToWhiteLengthRatio * blackToWhiteLengthRatio
+  purpleKeyHeight = blackToWhiteLengthRatio // It accumulates on XenKeyboard component
 ): XenOctaveDisplayManifest {
   const keyClasses: Array<KeyClass> = [
     // White keys
