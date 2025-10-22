@@ -1,3 +1,4 @@
+
 import {
   useRef,
   useState,
@@ -20,6 +21,7 @@ import { useElementRefBySelector } from "./hooks/fwk/useElementRefBySelector";
 import { useElementSize } from "./hooks/fwk/useElementSize";
 
 import CanvasKeyboard from "./components/CanvasKeyboard";
+import { NumberStepper } from "./components/NumberStepper";
 import type { Waveform, Envelope } from "./shared-types/audio-engine";
 import Synth from "./audio/synth";
 import { make12EDO } from "./data/edo-presets/12edo";
@@ -79,8 +81,8 @@ function App() {
   });
   const [synth, setSynth] = useState<Synth | null>(null);
   const [started, setStarted] = useState(false);
-  const [startingOctave, setStartingOctave] = useState<number | null>(null);
-  const [octaveCount, setOctaveCount] = useState<number | null>(null);
+  const [startingOctave, setStartingOctave] = useState<number>(4);
+  const [octaveCount, setOctaveCount] = useState<number>(2);
 
   useEffect(() => {
     if (bodyWidth > 0 && bodyHeight > 0) {
@@ -275,27 +277,18 @@ function App() {
               style={{ width: "4rem", marginLeft: "0.25rem" }}
             />
           </label>
-          {startingOctave !== null && (
-            <Div display="flex" flexDirection="row" alignItems="center" gap="0.5rem">
-              <Span color="white">Oct Start:</Span>
-              <Button onClick={() => setStartingOctave(startingOctave - 1)}>&lt;</Button>
-              <Span color="white">{startingOctave}</Span>
-              <Button onClick={() => setStartingOctave(startingOctave + 1)}>&gt;</Button>
-            </Div>
-          )}
-          {octaveCount !== null && (
-            <Div display="flex" flexDirection="row" alignItems="center" gap="0.5rem">
-              <Span color="white">Octaves:</Span>
-              <input
-                type="number"
-                min={1}
-                step={1}
-                value={octaveCount}
-                onChange={(e) => setOctaveCount(parseInt(e.target.value) || 1)}
-                style={{ width: "3rem", marginLeft: "0.25rem" }}
-              />
-            </Div>
-          )}
+          <NumberStepper
+            label="Oct Start:"
+            value={startingOctave}
+            onChange={setStartingOctave}
+            min={0}
+          />
+          <NumberStepper
+            label="Oct Count:"
+            value={octaveCount}
+            onChange={setOctaveCount}
+            min={1}
+          />
         </Header>
       )}
       <Main
