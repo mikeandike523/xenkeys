@@ -5,6 +5,7 @@ import type {
 } from "../../types/XenOctaveDisplayManifest";
 
 import getBaseFrequencyC from "../../utils/music-theory/getBaseFrequency";
+import { blackToWhiteWidthRatio, blackToWhiteLengthRatio } from "../piano-key-dimensions";
 
 let microStepPointer = 0;
 
@@ -120,10 +121,10 @@ export function make41EDO(
     outlineColor: "hsl(240, 100%, 30%)",
     outlineThickness: 3,
   },
-  blackKeyWidthToWhiteKeyWidthRatio = 0.6,
-  purpleKeyWidthToBlackKeyWidthRatio = 0.6,
-  blackKeyHeight = 0.8,
-  purpleKeyHeight = 0.8
+  blackKeyWidthToWhiteKeyWidthRatio = blackToWhiteWidthRatio,
+  purpleKeyWidthToBlackKeyWidthRatio = blackToWhiteWidthRatio,
+  blackKeyHeight = blackToWhiteLengthRatio,
+  purpleKeyHeight = blackToWhiteLengthRatio * blackToWhiteLengthRatio
 ): XenOctaveDisplayManifest {
   const keyClasses: Array<KeyClass> = [
     // White keys

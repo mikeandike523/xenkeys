@@ -29,9 +29,10 @@ import { make24EDO } from "./data/edo-presets/24edo";
 import { make31EDO } from "./data/edo-presets/31edo";
 import { make36EDO } from "./data/edo-presets/36edo";
 import { make41EDO } from "./data/edo-presets/41edo";
-import  {make48EDO } from "./data/edo-presets/48edo";
+import { make48EDO } from "./data/edo-presets/48edo";
 import type XenOctaveDisplayManifest from "./types/XenOctaveDisplayManifest";
 import iota from "./utils/algorithms/iota";
+import { whiteKeyAspect } from "./data/piano-key-dimensions";
 
 const default12EdoManifest = make12EDO();
 const default19EdoManifest = make19EDO();
@@ -74,31 +75,39 @@ function MultiOctaveDisplay({
 }) {
   const octaveWidth = width / cols;
   const octaveHeight = height / rows;
-  return iota(rows).map((row) => {
-    return iota(cols).map((col) => {
-      const startX = col * octaveWidth;
-      const startY = row * octaveHeight;
-      const octaveNumber = startingOctave + (rows - 1 - row) * cols + col;
-      const reactKey = `octave-${octaveNumber}`;
-      // Lower octave above higher octave to account for partially overflowing keys
-      const zIndex = cols - 1 - col;
-      return (
-        <Div key={reactKey}>
-          <XenKeyboard
-            zIndex={zIndex}
-            width={octaveWidth}
-            height={octaveHeight}
-            manifest={manifest}
-            top={startY}
-            left={startX}
-            octaveNumber={octaveNumber}
-            onIdPress={onIdPress}
-            onIdRelease={onIdRelease}
-          />
-        </Div>
-      );
-    });
-  });
+  return (
+    <Div
+    width={`${width}px`}
+    height={`${height}px`}
+    position="relative"
+    >
+      {iota(rows).map((row) => {
+        return iota(cols).map((col) => {
+          const startX = col * octaveWidth;
+          const startY = row * octaveHeight;
+          const octaveNumber = startingOctave + (rows - 1 - row) * cols + col;
+          const reactKey = `octave-${octaveNumber}`;
+          // Lower octave above higher octave to account for partially overflowing keys
+          const zIndex = cols - 1 - col;
+          return (
+            <Div key={reactKey}>
+              <XenKeyboard
+                zIndex={zIndex}
+                width={octaveWidth}
+                height={octaveHeight}
+                manifest={manifest}
+                top={startY}
+                left={startX}
+                octaveNumber={octaveNumber}
+                onIdPress={onIdPress}
+                onIdRelease={onIdRelease}
+              />
+            </Div>
+          );
+        });
+      })}
+    </Div>
+  );
 }
 
 function App() {
@@ -135,9 +144,9 @@ function App() {
   useEffect(() => {
     if (bodyWidth > 0 && bodyHeight > 0) {
       // Todo: measure intelligently based on aspect
-      setOctaveRows(1)
-      setOctaveCols(2)
-      setStartingOctave(4)
+      setOctaveRows(1);
+      setOctaveCols(2);
+      setStartingOctave(4);
     }
   }, [bodyWidth, bodyHeight]);
 
@@ -190,6 +199,19 @@ function App() {
 
   const [headerCollapsed, setHeaderCollapsed] = useState(false);
 
+  const octaveAspect = 7 * whiteKeyAspect;
+
+  const targetKeyboardAspect =
+    (octaveAspect * (octaveCols ?? 2)) / (octaveRows ?? 1);
+
+  let targetKeyboardWidth = currentPlayAreaWidth;
+
+  let targetKeyboardHeight = targetKeyboardWidth / targetKeyboardAspect;
+
+  if (targetKeyboardHeight > currentPlayAreaHeight) {
+    targetKeyboardHeight = currentPlayAreaHeight;
+    targetKeyboardWidth = targetKeyboardHeight * targetKeyboardAspect;
+  }
 
   return (
     <>
@@ -339,7 +361,6 @@ function App() {
               </Button>
             </Div>
           )}
-
         </Header>
       )}
       <Main
@@ -350,6 +371,10 @@ function App() {
         background="orange"
         position="relative"
         overflow="hidden"
+        display="flex"
+        flexDirection="column"
+        alignItems="center"
+        justifyContent="center"
       >
         {currentPlayAreaHeight > 0 &&
           currentPlayAreaWidth > 0 &&
@@ -363,8 +388,8 @@ function App() {
               startingOctave={startingOctave}
               onIdPress={onIdPress}
               onIdRelease={onIdRelease}
-              width={currentPlayAreaWidth}
-              height={currentPlayAreaHeight}
+              width={targetKeyboardWidth}
+              height={targetKeyboardHeight}
             />
           )}
       </Main>

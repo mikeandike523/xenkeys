@@ -1,6 +1,7 @@
 import type XenOctaveDisplayManifest from "../../types/XenOctaveDisplayManifest";
 import type { KeyClass, KeyDeclaration } from "../../types/XenOctaveDisplayManifest";
 import getBaseFrequencyC from "../../utils/music-theory/getBaseFrequency";
+import { blackToWhiteWidthRatio, blackToWhiteLengthRatio } from "../piano-key-dimensions";
 
 
 const keyDeclarations: Array<KeyDeclaration> = [
@@ -94,8 +95,8 @@ export function make48EDO(
         outlineColor: "hsl(0, 0%, 50%)",
         outlineThickness: 3,
     },
-    blackKeyWidthToWhiteKeyWidthRatio = 0.6,
-    blackKeyHeight=0.8
+    blackKeyWidthToWhiteKeyWidthRatio = blackToWhiteWidthRatio,
+    blackKeyHeight = blackToWhiteLengthRatio
 ): XenOctaveDisplayManifest{
     const keyClasses: Array<KeyClass> = [
         // White keys

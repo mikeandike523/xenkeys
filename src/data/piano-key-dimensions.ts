@@ -2,6 +2,7 @@
 export const whiteKeyWidth = 23.5;   // mm
 export const whiteKeyLength = 150;   // mm
 
+export const whiteKeyAspect = whiteKeyWidth / whiteKeyLength;
 
 export const blackKeyWidth = 13.7;   // mm
 export const blackKeyLength = 95;    // mm
