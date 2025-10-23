@@ -310,7 +310,7 @@ function App() {
         // for debugging
         background="orange"
         position="relative"
-        overflow="hidden"
+        overflow="auto"
         display="flex"
         flexDirection="column"
         alignItems="center"
