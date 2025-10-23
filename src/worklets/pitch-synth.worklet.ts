@@ -163,6 +163,21 @@ class PolyVoice {
       case 'power4':
         sample = powerSin(phase, 4);
         break;
+      case 'selfmod0.1':
+        sample = Math.sin(
+          2 * Math.PI * phase + 0.1 * 2 * Math.PI * Math.sin(2 * Math.PI * phase)
+        );
+        break;
+      case 'selfmod0.2':
+        sample = Math.sin(
+          2 * Math.PI * phase + 0.2 * 2 * Math.PI * Math.sin(2 * Math.PI * phase)
+        );
+        break;
+      case 'selfmod0.3':
+        sample = Math.sin(
+          2 * Math.PI * phase + 0.3 * 2 * Math.PI * Math.sin(2 * Math.PI * phase)
+        );
+        break;
       case 'sine':
       default:
         sample = Math.sin(2 * Math.PI * phase);

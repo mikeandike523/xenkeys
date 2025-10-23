@@ -5,7 +5,10 @@ export type Waveform =
   | 'sawtooth'
   | 'power2'
   | 'power3'
-  | 'power4';
+  | 'power4'
+  | 'selfmod0.1'
+  | 'selfmod0.2'
+  | 'selfmod0.3';
 
 export type Envelope = {
   attack: number;   // seconds

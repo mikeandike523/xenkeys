@@ -226,6 +226,9 @@ function App() {
           <Option value="power2">Power 2</Option>
           <Option value="power3">Power 3</Option>
           <Option value="power4">Power 4</Option>
+          <Option value="selfmod0.1">Self Mod 0.1</Option>
+          <Option value="selfmod0.2">Self Mod 0.2</Option>
+          <Option value="selfmod0.3">Self Mod 0.3</Option>
         </Select>
 
         <label style={{ color: "white" }}>
