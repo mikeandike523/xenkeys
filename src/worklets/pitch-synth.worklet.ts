@@ -37,8 +37,8 @@ function secondsToSamples(sec: number, sr: number): number {
  * Generalized power-sine oscillator: |sin(2π·phase)|^n * sign(sin(2π·phase)).
  */
 function powerSin(phase: number, n: number): number {
-  const s = Math.sin(2 * Math.PI * phase);
-  return Math.pow(Math.abs(s), 10*n) * Math.sign(s);
+  return Math.sin(2 * Math.PI * phase + 1/100 * n * Math.sin(2 * Math.PI * phase));
+ 
 }
 
 // --- Voice -------------------------------------------------------------------
