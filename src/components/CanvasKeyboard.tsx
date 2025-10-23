@@ -385,7 +385,7 @@ export default forwardRef<HTMLDivElement, CanvasKeyboardProps>(function CanvasKe
       left={leftPos}
       width={width}
       height={height}
-      overflow="visible"
+      overflow="hidden"
       onContextMenu={(e) => e.preventDefault()}
       css={css`
         touch-action: none;
