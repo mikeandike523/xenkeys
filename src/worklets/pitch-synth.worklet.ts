@@ -37,8 +37,8 @@ function secondsToSamples(sec: number, sr: number): number {
  * Generalized power-sine oscillator: |sin(2π·phase)|^n * sign(sin(2π·phase)).
  */
 function powerSin(phase: number, n: number): number {
-  return Math.sin(2 * Math.PI * phase + 1/10 * n * Math.sin(2 * Math.PI * phase));
- 
+  const s = Math.sin(2 * Math.PI * phase);
+  return Math.pow(Math.abs(s), n) * Math.sign(s);
 }
 
 // --- Voice -------------------------------------------------------------------
@@ -159,27 +159,6 @@ class PolyVoice {
         break;
       case 'power3':
         sample = powerSin(phase, 3);
-        break;
-      case 'power4':
-        sample = powerSin(phase, 4);
-        break;
-      case 'power5':
-        sample = powerSin(phase, 5);
-        break;
-      case 'power6':
-        sample = powerSin(phase, 6);
-        break;
-      case 'power7':
-        sample = powerSin(phase, 7);
-        break;
-      case 'power8':
-        sample = powerSin(phase, 8);
-        break;
-      case 'power9':
-        sample = powerSin(phase, 9);
-        break;
-      case 'power10':
-        sample = powerSin(phase, 10);
         break;
       case 'sine':
       default:
