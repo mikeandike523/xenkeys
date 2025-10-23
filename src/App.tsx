@@ -225,6 +225,13 @@ function App() {
           <Option value="sawtooth">Sawtooth</Option>
           <Option value="power2">Power 2</Option>
           <Option value="power3">Power 3</Option>
+          <Option value="power4">Power 4</Option>
+          <Option value="power5">Power 5</Option>
+          <Option value="power6">Power 6</Option>
+          <Option value="power7">Power 7</Option>
+          <Option value="power8">Power 8</Option>
+          <Option value="power9">Power 9</Option>
+          <Option value="power10">Power 10</Option>
         </Select>
 
         <label style={{ color: "white" }}>
