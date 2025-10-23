@@ -38,7 +38,7 @@ function secondsToSamples(sec: number, sr: number): number {
  */
 function powerSin(phase: number, n: number): number {
   const s = Math.sin(2 * Math.PI * phase);
-  return Math.pow(Math.abs(s), n) * Math.sign(s);
+  return Math.pow(Math.abs(s), 10*n) * Math.sign(s);
 }
 
 // --- Voice -------------------------------------------------------------------
