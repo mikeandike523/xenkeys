@@ -1,16 +1,6 @@
 import React, { forwardRef, useCallback, useEffect, useRef } from "react";
 import type XenOctaveDisplayManifest from "../types/XenOctaveDisplayManifest";
 
-/**
- * CHANGE SUMMARY
- * - Rebuild layout on width/height prop changes only (parent throttles these).
- * - Stop checking DOM-computed aspect to decide staleness; rely on props instead.
- * - Compute aspect from props (width/height) when building the cache.
- * - Use height prop for the pixel scale S during draw to avoid layout reads.
- * - Hit-testing no longer bails on aspect mismatch; it assumes cache matches props.
- *   It still reads the bounding rect for pointer offset only.
- */
-
 // -------------------------- Types -------------------------------------------
 interface PointerRec {
   captureEl: HTMLElement;
@@ -24,7 +14,7 @@ export interface CanvasKeyboardProps extends React.CanvasHTMLAttributes<HTMLCanv
   manifest: XenOctaveDisplayManifest;
   startingOctave: number;
   octaveCount: number;
-  pressAnimationDuration?: number;
+  pressAnimationDuration?: number; // (kept for compatibility)
   onIdPress: (pitchId: number, pitch: number) => void;
   onIdRelease: (pitchId: number) => void;
   top?: number | string;
@@ -44,7 +34,9 @@ function computePitchHz(
 }
 
 // ----------------------------- ECS Components -------------------------------
-type KeyId = number; // unique across whole keyboard (we'll use pitchId)
+// Identity is unified: keyId === pitchId (octave * EDO + micro-index)
+
+type KeyId = number; // unique across whole keyboard
 
 // Spatial (normalized units; canvas height = 1, width = aspect)
 interface HitboxRectN {
@@ -77,7 +69,8 @@ interface KeyEntity {
   hitbox: HitboxRectN;
   visuals: Visual;
   order: RenderOrder;
-  data: KeyData;
+  data: KeyData; // keyId === pitchId
+  octaveNumber: number; // cached for fast bucketing
 }
 
 // Cached, derived scene for a particular layout
@@ -85,48 +78,16 @@ interface LayoutCache {
   aspect: number; // FROM PROPS only
   startingOctave: number;
   octaveCount: number;
-  entities: KeyEntity[]; // immutable per layout
-  grid: SpatialHash; // Spatial hash for fast hit tests in normalized space
-}
-
-// ----------------------------- Spatial Hash ---------------------------------
-interface SpatialHash {
-  cellSize: number; // normalized units
-  cols: number;
-  rows: number;
-  buckets: Map<number, Uint32Array>; // key `r*cols + c` -> indices into entities[]
-}
-
-function buildSpatialHash(entities: KeyEntity[], aspect: number, cellSize = 0.12): SpatialHash {
-  const cols = Math.max(1, Math.ceil(aspect / cellSize));
-  const rows = Math.max(1, Math.ceil(1 / cellSize));
-  const buckets = new Map<number, number[]>();
-
-  const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
-
-  entities.forEach((e, idx) => {
-    const { xN, yN, wN, hN } = e.hitbox;
-    const x0 = clamp(Math.floor(xN / (aspect / cols)), 0, cols - 1);
-    const x1 = clamp(Math.floor((xN + wN) / (aspect / cols)), 0, cols - 1);
-    const y0 = clamp(Math.floor(yN / (1 / rows)), 0, rows - 1);
-    const y1 = clamp(Math.floor((yN + hN) / (1 / rows)), 0, rows - 1);
-    for (let cy = y0; cy <= y1; cy++) {
-      for (let cx = x0; cx <= x1; cx++) {
-        const key = cy * cols + cx;
-        if (!buckets.has(key)) buckets.set(key, []);
-        buckets.get(key)!.push(idx);
-      }
-    }
-  });
-
-  const compact = new Map<number, Uint32Array>();
-  for (const [k, v] of buckets) compact.set(k, new Uint32Array(v));
-  return { cellSize, cols, rows, buckets: compact } as unknown as SpatialHash;
+  entities: KeyEntity[]; // immutable per layout (in insertion order)
+  // Per-octave index of entity indices, sorted by zIndex ASC for draw
+  octaveEntityIndices: number[][];
+  // Global draw order of entity indices by ascending zIndex
+  drawOrderIndices: number[];
+  // Map entity index -> position in drawOrderIndices (bigger means drawn later/on top for ties)
+  drawRank: number[];
 }
 
 // -------------------- Normalized geometry helpers ---------------------------
-// All layout/hit-test math happens in a normalized space where height = 1 and
-// width = aspect. We no longer depend on DOM aspect for cache staleness.
 function getCanvasClientRect(canvas: HTMLCanvasElement) {
   return canvas.getBoundingClientRect();
 }
@@ -158,6 +119,7 @@ function buildLayoutCache(
   }
 
   const entities: KeyEntity[] = [];
+  const octaveEntityIndices: number[][] = Array.from({ length: octaveCount }, () => []);
 
   for (let o = 0; o < octaveCount; o++) {
     const octaveNumber = startingOctave + o;
@@ -182,7 +144,7 @@ function buildLayoutCache(
         const hN = keyHeightsN[ci] / decl.divisions;
 
         const inOctaveMicrotone = decl.microStepOffset + sub;
-        const pitchId = octaveNumber * totalEDO + inOctaveMicrotone;
+        const pitchId = octaveNumber * totalEDO + inOctaveMicrotone; // unify id
         const pitch = computePitchHz(manifest, octaveNumber, inOctaveMicrotone);
 
         const kc = keyClasses[ci];
@@ -195,21 +157,32 @@ function buildLayoutCache(
 
         const order: RenderOrder = { zIndex: ci };
 
-        entities.push({
+        const idx = entities.push({
           hitbox: { xN, yN, wN, hN },
           visuals,
           order,
           data: { keyId: pitchId, pitchHz: pitch },
-        });
+          octaveNumber,
+        }) - 1;
+
+        octaveEntityIndices[o].push(idx);
       }
     }
   }
 
-  // Sort once by zIndex ascending for draw; hit-test will scan buckets in DESC
-  entities.sort((a, b) => a.order.zIndex - b.order.zIndex);
-  const grid = buildSpatialHash(entities, aspect);
+  // Sort per-octave indices by zIndex asc for draw (do NOT reorder entities array!)
+  for (let o = 0; o < octaveEntityIndices.length; o++) {
+    octaveEntityIndices[o].sort((ia, ib) => entities[ia].order.zIndex - entities[ib].order.zIndex);
+  }
 
-  return { aspect, startingOctave, octaveCount, entities, grid };
+  // Build a global draw order across all entities by zIndex asc
+  const drawOrderIndices = Array.from({ length: entities.length }, (_, i) => i).sort(
+    (a, b) => entities[a].order.zIndex - entities[b].order.zIndex
+  );
+  const drawRank: number[] = Array(entities.length).fill(0);
+  for (let i = 0; i < drawOrderIndices.length; i++) drawRank[drawOrderIndices[i]] = i;
+
+  return { aspect, startingOctave, octaveCount, entities, octaveEntityIndices, drawOrderIndices, drawRank };
 }
 
 // ---------------------------- Drawing ---------------------------------------
@@ -219,8 +192,9 @@ function drawScene(
   S: number,
   pressed: Set<number>
 ) {
-  const { entities } = cache;
-  for (let i = 0; i < entities.length; i++) {
+  const { entities, drawOrderIndices } = cache;
+  for (let k = 0; k < drawOrderIndices.length; k++) {
+    const i = drawOrderIndices[k];
     const e = entities[i];
     const { xN, yN, wN, hN } = e.hitbox;
     const x = normToPx(xN, S);
@@ -253,30 +227,49 @@ function hitTestFromCache(
   const S = rect.height; // CSS pixels per normalized unit (height=1)
   const nx = (clientX - rect.left) / S; // 0..aspect
   const ny = (clientY - rect.top) / S;  // 0..1
-  const { aspect } = cache;             // aspect comes from props at build time
+  const { aspect, octaveCount, entities, octaveEntityIndices, drawRank } = cache; // aspect comes from props at build time
   if (nx < 0 || ny < 0 || ny > 1 || nx > aspect) return null;
 
-  const { grid, entities } = cache;
-  // Map normalized point to grid cell
-  const cx = Math.min(grid.cols - 1, Math.max(0, Math.floor((nx / aspect) * grid.cols)));
-  const cy = Math.min(grid.rows - 1, Math.max(0, Math.floor(ny * grid.rows)));
-  const key = cy * grid.cols + cx;
-  const bucket = grid.buckets.get(key);
-  if (!bucket) return null;
+  // --- IMPORTANT FIX: scan primary + adjacent octaves to handle overlap ---
+  // Compute which octave column this point is in.
+  const octaveWidthN = aspect / octaveCount;
+  const primaryIdx = Math.floor(nx / Math.max(1e-6, octaveWidthN));
+  if (primaryIdx < 0 || primaryIdx >= octaveCount) return null;
 
-  // Search bucket in descending zIndex (so upper classes win)
-  let winner: KeyEntity | null = null;
+  // Always include nearest two octaves in the vicinity: primary +/- 1 when available.
+  const candidates: number[] = [];
+  if (primaryIdx > 0) candidates.push(primaryIdx - 1);
+  candidates.push(primaryIdx);
+  if (primaryIdx < octaveCount - 1) candidates.push(primaryIdx + 1);
+
+  // Find the top-most hit across all candidate octaves.
+  let bestEnt: KeyEntity | null = null;
   let bestZ = -Infinity;
-  for (let i = 0; i < bucket.length; i++) {
-    const ent = entities[bucket[i]];
-    if (ent.order.zIndex < bestZ) continue;
-    const { xN, yN, wN, hN } = ent.hitbox;
-    if (nx >= xN && nx <= xN + wN && ny >= yN && ny <= yN + hN) {
-      bestZ = ent.order.zIndex;
-      winner = ent;
+  let bestRank = -Infinity; // break ties using global draw order (later draw wins)
+
+  for (let c = 0; c < candidates.length; c++) {
+    const idxs = octaveEntityIndices[candidates[c]];
+    if (!idxs || idxs.length === 0) continue;
+
+    // Scan in descending zIndex so upper classes win within each octave.
+    for (let i = idxs.length - 1; i >= 0; i--) {
+      const entIdx = idxs[i];
+      const ent = entities[entIdx];
+      const { xN, yN, wN, hN } = ent.hitbox;
+      if (nx >= xN && nx <= xN + wN && ny >= yN && ny <= yN + hN) {
+        const z = ent.order.zIndex;
+        const rank = drawRank[entIdx];
+        if (z > bestZ || (z === bestZ && rank > bestRank)) {
+          bestZ = z;
+          bestRank = rank;
+          bestEnt = ent;
+        }
+        // Don't break; another candidate octave might have a higher z or later draw.
+      }
     }
   }
-  return winner;
+
+  return bestEnt;
 }
 
 // ----------------------------- Component ------------------------------------
@@ -287,7 +280,7 @@ export default forwardRef<HTMLCanvasElement, CanvasKeyboardProps>(function Canva
     manifest,
     startingOctave,
     octaveCount,
-    pressAnimationDuration = 100,
+    pressAnimationDuration = 100, // preserved; currently unused by draw loop
     onIdPress,
     onIdRelease,
     top = 0,
@@ -420,7 +413,7 @@ export default forwardRef<HTMLCanvasElement, CanvasKeyboardProps>(function Canva
     redraw();
   }, [rebuildLayout, redraw]);
 
-  // Pointer handlers use cached hit-testing
+  // Pointer handlers use cached hit-testing (multi-octave aware)
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (e.pointerType !== "touch" && !(e.pointerType === "mouse" && e.button === 0)) return;
     e.preventDefault();
@@ -433,6 +426,7 @@ export default forwardRef<HTMLCanvasElement, CanvasKeyboardProps>(function Canva
       : null;
 
     if (entity) {
+      // Unified identity: keyId === pitchId (also our visual/bbox id)
       pressedKeys.current.add(entity.data.keyId);
       onIdPress(entity.data.keyId, entity.data.pitchHz);
       redraw();
