@@ -5,7 +5,7 @@ import type {
 } from "../../types/XenOctaveDisplayManifest";
 
 import getBaseFrequencyC from "../../utils/music-theory/getBaseFrequency";
-import { blackToWhiteWidthRatio, blackToWhiteLengthRatio } from "../piano-key-dimensions";
+import { blackToWhiteWidthRatio, blackToWhiteLengthRatio, purpleToBlackWidthRatio, purpleToBlackLengthRatio } from "../piano-key-dimensions";
 import { defaultWhiteKeyAppearance, defaultBlackKeyAppearance, defaultPurpleKeyAppearance } from "../color-presets";
 
 let microStepPointer = 0;
@@ -108,9 +108,9 @@ export function make19EDO(
   blackKeyAppearance = defaultBlackKeyAppearance,
   purpleKeyAppearance = defaultPurpleKeyAppearance,
   blackKeyWidthToWhiteKeyWidthRatio = blackToWhiteWidthRatio,
-  purpleKeyWidthToBlackKeyWidthRatio = blackToWhiteWidthRatio,
+  purpleKeyWidthToBlackKeyWidthRatio = purpleToBlackWidthRatio,
   blackKeyHeight = blackToWhiteLengthRatio,
-  purpleKeyHeight = blackToWhiteLengthRatio * blackToWhiteLengthRatio
+  purpleKeyHeight = purpleToBlackLengthRatio
 ): XenOctaveDisplayManifest {
   const keyClasses: Array<KeyClass> = [
     // White keys
