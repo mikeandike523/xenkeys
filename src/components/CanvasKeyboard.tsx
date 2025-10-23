@@ -2,9 +2,13 @@ import React, { forwardRef, useCallback, useEffect, useRef } from "react";
 import type XenOctaveDisplayManifest from "../types/XenOctaveDisplayManifest";
 
 /**
- * ECS-ish model: each KeyEntity aggregates components we care about at runtime.
- * We cache *normalized* hit rectangles & visual info so both drawing and hit-testing
- * are fast and avoid recomputing geometry on every pointer event / repaint.
+ * CHANGE SUMMARY
+ * - Rebuild layout on width/height prop changes only (parent throttles these).
+ * - Stop checking DOM-computed aspect to decide staleness; rely on props instead.
+ * - Compute aspect from props (width/height) when building the cache.
+ * - Use height prop for the pixel scale S during draw to avoid layout reads.
+ * - Hit-testing no longer bails on aspect mismatch; it assumes cache matches props.
+ *   It still reads the bounding rect for pointer offset only.
  */
 
 // -------------------------- Types -------------------------------------------
@@ -15,8 +19,8 @@ interface PointerRec {
 }
 
 export interface CanvasKeyboardProps extends React.CanvasHTMLAttributes<HTMLCanvasElement> {
-  width: number; // CSS pixels (intrinsic size will be DPR-scaled automatically)
-  height: number; // CSS pixels (intrinsic size will be DPR-scaled automatically)
+  width: number; // CSS pixels
+  height: number; // CSS pixels
   manifest: XenOctaveDisplayManifest;
   startingOctave: number;
   octaveCount: number;
@@ -78,12 +82,11 @@ interface KeyEntity {
 
 // Cached, derived scene for a particular layout
 interface LayoutCache {
-  aspect: number;
+  aspect: number; // FROM PROPS only
   startingOctave: number;
   octaveCount: number;
   entities: KeyEntity[]; // immutable per layout
-  // Spatial hash for fast hit tests in normalized space
-  grid: SpatialHash;
+  grid: SpatialHash; // Spatial hash for fast hit tests in normalized space
 }
 
 // ----------------------------- Spatial Hash ---------------------------------
@@ -91,8 +94,7 @@ interface SpatialHash {
   cellSize: number; // normalized units
   cols: number;
   rows: number;
-  // key `r*cols + c` -> indices into entities[]
-  buckets: Map<number, Uint32Array>;
+  buckets: Map<number, Uint32Array>; // key `r*cols + c` -> indices into entities[]
 }
 
 function buildSpatialHash(entities: KeyEntity[], aspect: number, cellSize = 0.12): SpatialHash {
@@ -117,7 +119,6 @@ function buildSpatialHash(entities: KeyEntity[], aspect: number, cellSize = 0.12
     }
   });
 
-  // compact to typed arrays
   const compact = new Map<number, Uint32Array>();
   for (const [k, v] of buckets) compact.set(k, new Uint32Array(v));
   return { cellSize, cols, rows, buckets: compact } as unknown as SpatialHash;
@@ -125,12 +126,9 @@ function buildSpatialHash(entities: KeyEntity[], aspect: number, cellSize = 0.12
 
 // -------------------- Normalized geometry helpers ---------------------------
 // All layout/hit-test math happens in a normalized space where height = 1 and
-// width = aspect = rect.width / rect.height. DPR does not appear in hit-testing.
-function getCanvasClientMetrics(canvas: HTMLCanvasElement) {
-  const rect = canvas.getBoundingClientRect();
-  const aspect = rect.width / rect.height; // A = W/H
-  const S = rect.height; // pixel scale for normalized units (CSS pixels)
-  return { rect, aspect, S };
+// width = aspect. We no longer depend on DOM aspect for cache staleness.
+function getCanvasClientRect(canvas: HTMLCanvasElement) {
+  return canvas.getBoundingClientRect();
 }
 
 function normToPx(n: number, S: number) {
@@ -249,15 +247,14 @@ function hitTestFromCache(
   canvas: HTMLCanvasElement,
   cache: LayoutCache
 ): KeyEntity | null {
-  const { rect, aspect, S } = getCanvasClientMetrics(canvas);
+  const rect = getCanvasClientRect(canvas);
 
-  // Client → normalized coords (height=1, width=aspect)
+  // Client → normalized coords using PROPS-derived aspect and rect-based offsets.
+  const S = rect.height; // CSS pixels per normalized unit (height=1)
   const nx = (clientX - rect.left) / S; // 0..aspect
-  const ny = (clientY - rect.top) / S; // 0..1
+  const ny = (clientY - rect.top) / S;  // 0..1
+  const { aspect } = cache;             // aspect comes from props at build time
   if (nx < 0 || ny < 0 || ny > 1 || nx > aspect) return null;
-
-  // If aspect changed, the cache is stale. Bail early and let caller rebuild.
-  if (Math.abs(aspect - cache.aspect) > 1e-6) return null;
 
   const { grid, entities } = cache;
   // Map normalized point to grid cell
@@ -267,13 +264,12 @@ function hitTestFromCache(
   const bucket = grid.buckets.get(key);
   if (!bucket) return null;
 
-  // Search bucket in descending zIndex (so upper classes win). Our entities[] is
-  // sorted by zIndex ascending globally; find candidates and track max.
+  // Search bucket in descending zIndex (so upper classes win)
   let winner: KeyEntity | null = null;
   let bestZ = -Infinity;
   for (let i = 0; i < bucket.length; i++) {
     const ent = entities[bucket[i]];
-    if (ent.order.zIndex < bestZ) continue; // can't beat current winner
+    if (ent.order.zIndex < bestZ) continue;
     const { xN, yN, wN, hN } = ent.hitbox;
     if (nx >= xN && nx <= xN + wN && ny >= yN && ny <= yN + hN) {
       bestZ = ent.order.zIndex;
@@ -305,7 +301,7 @@ export default forwardRef<HTMLCanvasElement, CanvasKeyboardProps>(function Canva
   const activePointers = useRef<Map<number, PointerRec>>(new Map());
   const pressedKeys = useRef<Set<number>>(new Set());
 
-  // Cached layout for current geometry/manifest
+  // Cached layout for current geometry/manifest (aspect derived from props)
   const layoutRef = useRef<LayoutCache | null>(null);
 
   // Merge forwarded ref
@@ -373,35 +369,31 @@ export default forwardRef<HTMLCanvasElement, CanvasKeyboardProps>(function Canva
     };
   }, [onIdRelease]);
 
-  // Build or refresh the layout cache when manifest/geometry fundamentals change
+  // Build or refresh the layout cache using props-derived aspect
   const rebuildLayout = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const { aspect } = getCanvasClientMetrics(canvas);
+    const aspect = width / Math.max(1, height); // guard divide-by-zero
     layoutRef.current = buildLayoutCache(
       manifest,
       startingOctave,
       octaveCount,
       aspect
     );
-  }, [manifest, startingOctave, octaveCount]);
+  }, [manifest, startingOctave, octaveCount, width, height]);
 
-  // Draw function that uses cached entities
+  // Draw function that uses cached entities; S comes from HEIGHT PROP to avoid layout reads
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const { S, aspect } = getCanvasClientMetrics(canvas);
+    const S = height; // CSS px per normalized unit (height=1)
 
-    // If aspect changed vs cache (resize), rebuild lazily here
-    if (!layoutRef.current || Math.abs(layoutRef.current.aspect - aspect) > 1e-6) {
-      rebuildLayout();
-    }
+    if (!layoutRef.current) rebuildLayout();
     if (!layoutRef.current) return;
 
-    
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -409,15 +401,14 @@ export default forwardRef<HTMLCanvasElement, CanvasKeyboardProps>(function Canva
     drawScene(ctx, layoutRef.current, S, pressedKeys.current);
 
     ctx.restore();
-  }, [rebuildLayout]);
+  }, [rebuildLayout, height]);
 
-  // Ensure intrinsic canvas size matches CSS size; no DPR-based scaling.
+  // Ensure intrinsic canvas size matches CSS size
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     canvas.width = Math.max(1, Math.floor(width));
     canvas.height = Math.max(1, Math.floor(height));
-    // Rebuild cache on size change (affects aspect)
     rebuildLayout();
     redraw();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -509,8 +500,6 @@ export default forwardRef<HTMLCanvasElement, CanvasKeyboardProps>(function Canva
       ref={canvasRef}
       width={width}
       height={height}
-      // Intrinsic pixel size (backing store) is DPR-scaled via effect; here we set
-      // the logical CSS size and positioning.
       style={{
         width: `${width}px`,
         height: `${height}px`,
