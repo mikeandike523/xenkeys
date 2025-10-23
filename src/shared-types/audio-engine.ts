@@ -5,13 +5,7 @@ export type Waveform =
   | 'sawtooth'
   | 'power2'
   | 'power3'
-  | 'power4'
-  | 'power5'
-  | 'power6'
-  | 'power7'
-  | 'power8'
-  | 'power9'
-  | 'power10';
+  | 'power4';
 
 export type Envelope = {
   attack: number;   // seconds

@@ -160,6 +160,9 @@ class PolyVoice {
       case 'power3':
         sample = powerSin(phase, 3);
         break;
+      case 'power4':
+        sample = powerSin(phase, 4);
+        break;
       case 'sine':
       default:
         sample = Math.sin(2 * Math.PI * phase);
