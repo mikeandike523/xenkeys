@@ -33,6 +33,14 @@ function secondsToSamples(sec: number, sr: number): number {
   return Math.max(1, Math.floor(Math.max(0, sec) * sr));
 }
 
+/**
+ * Generalized power-sine oscillator: |sin(2π·phase)|^n * sign(sin(2π·phase)).
+ */
+function powerSin(phase: number, n: number): number {
+  const s = Math.sin(2 * Math.PI * phase);
+  return Math.pow(Math.abs(s), n) * Math.sign(s);
+}
+
 // --- Voice -------------------------------------------------------------------
 
 class PolyVoice {
@@ -145,6 +153,12 @@ class PolyVoice {
         break;
       case 'sawtooth':
         sample = 2 * phase - 1;
+        break;
+      case 'power2':
+        sample = powerSin(phase, 2);
+        break;
+      case 'power3':
+        sample = powerSin(phase, 3);
         break;
       case 'sine':
       default:

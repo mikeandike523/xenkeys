@@ -223,6 +223,8 @@ function App() {
           <Option value="square">Square</Option>
           <Option value="triangle">Triangle</Option>
           <Option value="sawtooth">Sawtooth</Option>
+          <Option value="power2">Power 2</Option>
+          <Option value="power3">Power 3</Option>
         </Select>
 
         <label style={{ color: "white" }}>

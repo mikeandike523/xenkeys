@@ -1,4 +1,4 @@
-export type Waveform = 'sine' | 'square' | 'triangle' | 'sawtooth';
+export type Waveform = 'sine' | 'square' | 'triangle' | 'sawtooth' | 'power2' | 'power3';
 
 export type Envelope = {
   attack: number;   // seconds
