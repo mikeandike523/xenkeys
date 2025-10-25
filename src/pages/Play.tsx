@@ -65,7 +65,7 @@ const defaultEnvelope: Envelope = {
   release: 0.5,
 };
 
-export default function Play2() {
+export default function Play() {
   const bodyRef = useElementRefBySelector<HTMLBodyElement>("body");
 
   const bodySize = useElementSize(bodyRef);
