@@ -24,6 +24,20 @@ type VoiceState = 'idle' | 'attack' | 'decay' | 'sustain' | 'release';
 // Some environments need this to placate TS about global `sampleRate` in worklets.
 declare const sampleRate: number;
 
+// --- RMS normalization config -------------------------------------------------
+
+/**
+ * Number of sample points to measure per oscillator cycle when precomputing RMS.
+ * Increase for more accuracy (slightly more module init cost).
+ */
+const RMS_SAMPLE_POINTS = 50;
+
+/**
+ * Number of cycles to measure when precomputing RMS.
+ * Useful for exotic/self-modulating periodic shapes to ensure stability.
+ */
+const RMS_NUM_CYCLES = 1;
+
 // --- Utilities ---------------------------------------------------------------
 
 const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
@@ -40,6 +54,80 @@ function powerSin(phase: number, n: number): number {
   const s = Math.sin(2 * Math.PI * phase);
   return Math.pow(Math.abs(s), n) * Math.sign(s);
 }
+
+/**
+ * Pure oscillator output for a given phase in [0,1).
+ * Keep in sync with the switch in PolyVoice.process (or use this helper there).
+ */
+function oscSample(w: Waveform, phase: number): number {
+  switch (w) {
+    case 'square':
+      return phase < 0.5 ? 1 : -1;
+    case 'triangle':
+      return 1 - 4 * Math.abs(phase - 0.5);
+    case 'sawtooth':
+      return 2 * phase - 1;
+    case 'power2':
+      return powerSin(phase, 2);
+    case 'power3':
+      return powerSin(phase, 3);
+    case 'power4':
+      return powerSin(phase, 4);
+    case 'selfmod0.1':
+      return Math.sin(2 * Math.PI * phase + 0.1 * 2 * Math.PI * Math.sin(2 * Math.PI * phase));
+    case 'selfmod0.2':
+      return Math.sin(2 * Math.PI * phase + 0.2 * 2 * Math.PI * Math.sin(2 * Math.PI * phase));
+    case 'selfmod0.3':
+      return Math.sin(2 * Math.PI * phase + 0.3 * 2 * Math.PI * Math.sin(2 * Math.PI * phase));
+    case 'sine':
+    default:
+      return Math.sin(2 * Math.PI * phase);
+  }
+}
+
+/**
+ * Compute RMS of a periodic waveform by uniform sampling.
+ */
+function computeWaveformRMS(w: Waveform, pointsPerCycle: number, cycles: number): number {
+  const totalPoints = Math.max(1, Math.floor(pointsPerCycle)) * Math.max(1, Math.floor(cycles));
+  let acc = 0;
+  for (let i = 0; i < totalPoints; i++) {
+    const phase = (i / pointsPerCycle) % 1; // wraps each cycle
+    const s = oscSample(w, phase);
+    acc += s * s;
+  }
+  return Math.sqrt(acc / totalPoints);
+}
+
+/**
+ * Build a normalization gain map so that each waveform’s RMS matches triangle’s RMS.
+ * If you prefer a different target (e.g. sine), change targetWave.
+ */
+const KNOWN_WAVEFORMS: Waveform[] = [
+  'sine',
+  'square',
+  'triangle',
+  'sawtooth',
+  'power2',
+  'power3',
+  'power4',
+  'selfmod0.1',
+  'selfmod0.2',
+  'selfmod0.3',
+];
+
+const targetWave: Waveform = 'triangle';
+const targetRMS = computeWaveformRMS(targetWave, RMS_SAMPLE_POINTS, RMS_NUM_CYCLES);
+
+const NORMALIZATION_GAIN: Record<string, number> = (() => {
+  const map: Record<string, number> = {};
+  for (const w of KNOWN_WAVEFORMS) {
+    const r = computeWaveformRMS(w, RMS_SAMPLE_POINTS, RMS_NUM_CYCLES);
+    // Fallback to 1 if RMS is degenerate (shouldn’t happen with these shapes).
+    map[w] = r > 0 ? (targetRMS / r) : 1;
+  }
+  return map;
+})();
 
 // --- Voice -------------------------------------------------------------------
 
@@ -142,47 +230,13 @@ class PolyVoice {
     // Phase & waveform
     const t = (this._samples * this._freq) / this.sr;
     const phase = t - Math.floor(t); // [0,1)
-    let sample: number;
 
-    switch (this.waveform) {
-      case 'square':
-        sample = phase < 0.5 ? 1 : -1;
-        break;
-      case 'triangle':
-        sample = 1 - 4 * Math.abs(phase - 0.5);
-        break;
-      case 'sawtooth':
-        sample = 2 * phase - 1;
-        break;
-      case 'power2':
-        sample = powerSin(phase, 2);
-        break;
-      case 'power3':
-        sample = powerSin(phase, 3);
-        break;
-      case 'power4':
-        sample = powerSin(phase, 4);
-        break;
-      case 'selfmod0.1':
-        sample = Math.sin(
-          2 * Math.PI * phase + 0.1 * 2 * Math.PI * Math.sin(2 * Math.PI * phase)
-        );
-        break;
-      case 'selfmod0.2':
-        sample = Math.sin(
-          2 * Math.PI * phase + 0.2 * 2 * Math.PI * Math.sin(2 * Math.PI * phase)
-        );
-        break;
-      case 'selfmod0.3':
-        sample = Math.sin(
-          2 * Math.PI * phase + 0.3 * 2 * Math.PI * Math.sin(2 * Math.PI * phase)
-        );
-        break;
-      case 'sine':
-      default:
-        sample = Math.sin(2 * Math.PI * phase);
-        break;
-    }
+    // Base oscillator sample
+    let sample = oscSample(this.waveform, phase);
+
+    // Apply precomputed normalization gain so each waveform matches triangle RMS.
+    const norm = NORMALIZATION_GAIN[this.waveform] ?? 1;
+    sample *= norm;
 
     this._samples++;
     return sample * envAmp;
@@ -312,7 +366,9 @@ class PitchSynthProcessor extends AudioWorkletProcessor {
         mix += this.voices[v].process();
       }
       const gain = vol.length > 1 ? vol[i] : vol[0];
-      const s = mix * gain * 0.25; // headroom
+
+      // Keep a little headroom since multiple voices can stack
+      const s = mix * gain * 0.25;
 
       for (let ch = 0; ch < output.length; ch++) {
         output[ch][i] = s;
@@ -323,5 +379,4 @@ class PitchSynthProcessor extends AudioWorkletProcessor {
   }
 }
 
-// The name is generalized (no “quarter-tone” baked in).
 registerProcessor('pitch-synth', PitchSynthProcessor);
