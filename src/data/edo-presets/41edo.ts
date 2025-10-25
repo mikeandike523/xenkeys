@@ -110,7 +110,7 @@ export function make41EDO(
   blackKeyWidthToWhiteKeyWidthRatio = blackToWhiteWidthRatio,
   purpleKeyWidthToBlackKeyWidthRatio = purpleToBlackWidthRatio,
   blackKeyHeight = blackToWhiteLengthRatio,
-  purpleKeyHeight = purpleToBlackLengthRatio // It accumulates in XenKeyboard component
+  purpleKeyHeight = purpleToBlackLengthRatio
 ): XenOctaveDisplayManifest {
   const keyClasses: Array<KeyClass> = [
     // White keys
