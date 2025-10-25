@@ -38,6 +38,8 @@ const RMS_SAMPLE_POINTS = 50;
  */
 const RMS_NUM_CYCLES = 1;
 
+const AVG_EXPECTED_SIMULTANEOUS_VOICES = 6;
+
 // --- Utilities ---------------------------------------------------------------
 
 const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
@@ -368,7 +370,7 @@ class PitchSynthProcessor extends AudioWorkletProcessor {
       const gain = vol.length > 1 ? vol[i] : vol[0];
 
       // Keep a little headroom since multiple voices can stack
-      const s = mix * gain * 0.25;
+      const s = mix * gain * (1.0/AVG_EXPECTED_SIMULTANEOUS_VOICES);
 
       for (let ch = 0; ch < output.length; ch++) {
         output[ch][i] = s;
