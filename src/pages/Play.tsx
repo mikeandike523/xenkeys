@@ -64,27 +64,18 @@ const defaultEnvelope: Envelope = {
   release: 0.5,
 };
 
-type SavedPiece = {
-  id: string;
-  name: string;
-  url: string; // object URL for playback / download
-  mimeType: string;
-  createdAt: number;
-};
-
 export default function Play() {
   const bodyRef = useElementRefBySelector<HTMLBodyElement>("body");
-
   const bodySize = useElementSize(bodyRef);
 
   const cpanelRef = useRef<HTMLElement>(null);
   const playAreaRef = useRef<HTMLElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
 
   const cpanelRefSize = useElementSize(cpanelRef);
 
   const bodyWidth = bodySize?.width || 0;
   const bodyHeight = bodySize?.height || 0;
-
   const cpanelHeight = cpanelRefSize?.height || 0;
 
   const [manifestName, setManifestName, resetManifestName] = usePersistentState<
@@ -98,24 +89,31 @@ export default function Play() {
     "envelope",
     defaultEnvelope
   );
+
   const [synth, setSynth] = useState<Synth | null>(null);
   const [started, setStarted] = useState(false);
 
+  // --- Simple, single active recording ---
   const [recorder, setRecorder] = useState<Recorder | null>(null);
   const [isRecording, setIsRecording] = useState(false);
 
-  const [pieces, setPieces] = usePersistentState<SavedPiece[]>(
-    "savedPieces",
-    []
-  );
+  // Active/committed take
+  const [activeUrl, setActiveUrl] = useState<string | null>(null);
+  const [activeMime, setActiveMime] = useState<string | null>(null);
 
-  // Init synth (unchanged) + create Recorder
+  // Playback bounds (simple: always 0..duration; pause at end when bounded)
+  const [playbackStart] = useState<number>(0);
+  const [playbackEnd, setPlaybackEnd] = useState<number | null>(null);
+
+  // Init synth + recorder exactly once
   useEffect(() => {
-    Synth.create().then((s) => {
+    let mounted = true;
+    (async () => {
+      const s = await Synth.create();
+      if (!mounted) return;
       setSynth(s);
       s.setWaveform(waveform);
       s.setEnvelope(envelope);
-
       try {
         const r = new Recorder(s.getMediaStream());
         setRecorder(r);
@@ -123,56 +121,88 @@ export default function Play() {
         console.warn("Recorder unavailable:", err);
         setRecorder(null);
       }
-    });
+    })();
+    return () => {
+      mounted = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Keep synth params in sync
+  useEffect(() => {
+    if (synth) synth.setWaveform(waveform);
+  }, [synth, waveform]);
+  useEffect(() => {
+    if (synth) synth.setEnvelope(envelope);
+  }, [synth, envelope]);
+
+  // Utility: hard reset playhead & reload the element to avoid scrubber glitches
+  const resetPlayhead = useCallback(() => {
+    const el = audioRef.current;
+    if (!el) return;
+    try {
+      el.pause();
+      el.currentTime = 0;
+      // Force a layout/metadata refresh to keep the scrubber honest
+      el.load();
+    } catch (e) {
+      // no-op
+    }
   }, []);
 
   // Record controls
   const handleRecordStart = useCallback(async () => {
-    if (!synth) return;
+    if (!synth || !recorder) return;
     await synth.resume();
-    recorder?.start();
+    // Reset playhead and disable playback while recording
+    resetPlayhead();
+    recorder.start();
     setIsRecording(true);
-  }, [synth, recorder]);
+  }, [synth, recorder, resetPlayhead]);
 
-  const handleRecordStop = useCallback(async () => {
+  // Stop and SAVE (commit directly to active)
+  const handleRecordStopSave = useCallback(async () => {
     if (!recorder) return;
     const rec: Recording = await recorder.stop();
     setIsRecording(false);
 
-    // Create a persistent-ish object URL for this session
+    // Revoke previous active before replacing
+    if (activeUrl) URL.revokeObjectURL(activeUrl);
     const url = URL.createObjectURL(rec.blob);
-    const stamp = new Date(rec.createdAt);
-    const id = `${rec.createdAt}`;
-    const name = `Piece ${pieces.length + 1} — ${stamp.toLocaleString()}`;
+    setActiveUrl(url);
+    setActiveMime(rec.mimeType || "audio/webm");
 
-    const piece: SavedPiece = {
-      id,
-      name,
-      url,
-      mimeType: rec.mimeType,
-      createdAt: rec.createdAt,
-    };
+    // Set bounds to the natural duration when metadata is ready
+    const el = audioRef.current;
+    if (el) {
+      const onMeta = () => {
+        setPlaybackEnd(isFinite(el.duration) ? el.duration : null);
+        el.removeEventListener("loadedmetadata", onMeta);
+      };
+      el.addEventListener("loadedmetadata", onMeta);
+    }
 
-    setPieces([piece, ...pieces]);
-  }, [recorder, pieces, setPieces]);
+    // keep scrubber honest
+    resetPlayhead();
+  }, [recorder, activeUrl, resetPlayhead]);
 
-  const handleDeletePiece = useCallback(
-    (id: string) => {
-      setPieces((prev) => {
-        const keep = prev.filter((p) => p.id !== id);
-        // Revoke any object URLs we’re dropping
-        const dropped = prev.find((p) => p.id === id);
-        if (dropped) URL.revokeObjectURL(dropped.url);
-        return keep;
-      });
-    },
-    [setPieces]
-  );
+  // Stop and DISCARD (do not overwrite active)
+  const handleRecordStopDiscard = useCallback(async () => {
+    if (!recorder) return;
+    try {
+      await recorder.stop();
+    } finally {
+      setIsRecording(false);
+      resetPlayhead();
+    }
+  }, [recorder, resetPlayhead]);
 
+  // Revoke blob URL on unmount for safety
   useEffect(() => {
-  return () => pieces.forEach(p => URL.revokeObjectURL(p.url));
-}, []); // in Play.tsx
+    return () => {
+      if (activeUrl) URL.revokeObjectURL(activeUrl);
+    };
+  }, [activeUrl]);
 
   const [startingOctave, setStartingOctave, resetStartingOctave] =
     usePersistentState<number>("startingOctave", 4);
@@ -198,36 +228,13 @@ export default function Play() {
 
   useEffect(() => {
     if (bodyWidth > 0 && bodyHeight > 0) {
-      // initialize with a default number of octaves and starting octave
-      // This effect might not be needed anymore if persistent state is desired on first load
-      // but keeping it in case the logic is to resize based on window size initially.
-      // setOctaveCount(2);
-      // setStartingOctave(4);
+      // no-op placeholder; sizing handled below
     }
   }, [bodyWidth, bodyHeight]);
-
-  // Initialize the audio worklet once
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    Synth.create().then((s) => {
-      setSynth(s);
-      s.setWaveform(waveform);
-      s.setEnvelope(envelope);
-    });
-  }, []);
-
-  useEffect(() => {
-    if (synth) synth.setWaveform(waveform);
-  }, [synth, waveform]);
-
-  useEffect(() => {
-    if (synth) synth.setEnvelope(envelope);
-  }, [synth, envelope]);
 
   const manifest = manifestPresets[manifestName];
 
   const playAreaSize = useElementSize(playAreaRef);
-
   const currentPlayAreaWidth = playAreaSize?.width || 0;
   const currentPlayAreaHeight = playAreaSize?.height || 0;
 
@@ -254,24 +261,36 @@ export default function Play() {
   }, [synth]);
 
   const octaveAspect = 7 * whiteKeyAspect;
-
   const targetKeyboardAspect = octaveAspect * (octaveCount ?? 1);
-
   let targetKeyboardWidth = currentPlayAreaWidth;
-
   let targetKeyboardHeight = targetKeyboardWidth / targetKeyboardAspect;
-
   if (targetKeyboardHeight > currentPlayAreaHeight) {
     targetKeyboardHeight = currentPlayAreaHeight;
     targetKeyboardWidth = targetKeyboardHeight * targetKeyboardAspect;
   }
+
+  const canDownload = Boolean(activeUrl && activeMime);
+  const filename = `recording.${activeMime?.includes("ogg") ? "ogg" : "webm"}`;
+
+  // Enforce simple bounds by pausing at playbackEnd
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el) return;
+    const onTimeUpdate = () => {
+      if (playbackEnd != null && el.currentTime > playbackEnd) {
+        el.pause();
+        el.currentTime = playbackStart;
+      }
+    };
+    el.addEventListener("timeupdate", onTimeUpdate);
+    return () => el.removeEventListener("timeupdate", onTimeUpdate);
+  }, [playbackStart, playbackEnd]);
 
   return (
     <>
       <Header
         width="100%"
         ref={cpanelRef}
-        //  For debugging
         background="teal"
         padding="0.5rem"
         display="flex"
@@ -306,6 +325,7 @@ export default function Play() {
         <Button onClick={() => setShowResetConfirm(true)} padding="0.5rem">
           Reset All Settings
         </Button>
+
         <Select
           value={manifestName}
           onChange={(e: ChangeEvent<HTMLSelectElement>) => {
@@ -416,8 +436,9 @@ export default function Play() {
           onChange={setOctaveCount}
           min={1}
         />
-        {/* --- Recording Controls --- */}
-        <Div display="flex" gap="0.5rem" marginLeft="auto">
+
+        {/* --- Recording controls (two-button finish) --- */}
+        <Div display="flex" gap="0.5rem" marginLeft="auto" alignItems="center">
           {!isRecording ? (
             <Button
               onClick={handleRecordStart}
@@ -429,26 +450,81 @@ export default function Play() {
               ● Record
             </Button>
           ) : (
-            <Button
-              onClick={handleRecordStop}
-              background="#2e7d32"
-              color="white"
-              padding="0.5rem 1rem"
-              title="Stop recording"
-            >
-              ■ Stop
-            </Button>
+            <Div display="flex" gap="0.5rem">
+              <Button
+                onClick={handleRecordStopSave}
+                background="#2e7d32"
+                color="white"
+                padding="0.5rem 1rem"
+                title="Stop and save recording"
+              >
+                ■ Stop & Save
+              </Button>
+              <Button
+                onClick={handleRecordStopDiscard}
+                background="#616161"
+                color="white"
+                padding="0.5rem 1rem"
+                title="Stop and discard recording"
+              >
+                ✕ Stop & Discard
+              </Button>
+            </Div>
           )}
+
+          {/* Inline player for the committed take; greyed/disabled while recording */}
+          <audio
+            ref={audioRef}
+            src={activeUrl ?? undefined}
+            controls
+            onPlay={() => {
+              // If bounds are set and we're at end, snap to start
+              const el = audioRef.current;
+              if (el && playbackEnd != null && el.currentTime >= playbackEnd) {
+                el.currentTime = playbackStart;
+              }
+            }}
+            style={{
+              maxWidth: 260,
+              pointerEvents: isRecording ? "none" : "auto",
+              opacity: isRecording ? 0.5 : 1,
+            }}
+            aria-disabled={isRecording}
+          />
+
+          {/* Download button; relies on the user to save if they want to keep */}
+          <A
+            href={activeUrl ?? undefined}
+            download={canDownload ? filename : undefined}
+            aria-disabled={!canDownload || isRecording}
+            css={css`
+              pointer-events: ${canDownload && !isRecording ? "auto" : "none"};
+              opacity: ${canDownload && !isRecording ? 1 : 0.5};
+            `}
+            background="white"
+            color="black"
+            padding="0.5rem 0.75rem"
+            borderRadius="0.375rem"
+            title={
+              canDownload
+                ? isRecording
+                  ? "Disabled while recording"
+                  : "Download current recording"
+                : "Record something to enable download"
+            }
+          >
+            Download
+          </A>
         </Div>
       </Header>
+
       <Main
         width="100%"
         ref={playAreaRef}
         height={`${bodyHeight - cpanelHeight}px`}
-        // for debugging
         background="orange"
         position="relative"
-        overflow="auto"
+        overflow="hidden"
         display="flex"
         flexDirection="column"
         alignItems="center"
@@ -469,56 +545,15 @@ export default function Play() {
             />
           )}
       </Main>
+
+      {/* --- Click-to-start overlay --- */}
       {!started && (
         <div className="audio-modal" onClick={handleStart}>
           <span>Click to Start Audio</span>
         </div>
       )}
-      {/* --- Pieces shelf --- */}
-      {pieces.length > 0 && (
-        <Div
-          background="#111"
-          color="white"
-          padding="0.75rem"
-          display="flex"
-          flexDirection="column"
-          gap="0.75rem"
-        >
-          <Span fontWeight="bold" fontSize="1.25rem">Your Pieces</Span>
-          {pieces.map((p) => (
-            <Div
-              key={p.id}
-              background="#222"
-              padding="0.75rem"
-              borderRadius="0.5rem"
-              display="flex"
-              alignItems="center"
-              gap="0.75rem"
-            >
-              <Span minWidth="12rem">{p.name}</Span>
-              <audio src={p.url} controls style={{ flex: 1 }} />
-              <A
-                href={p.url}
-                download={`${p.name}.${p.mimeType.includes("ogg") ? "ogg" : "webm"}`}
-                background="white"
-                color="black"
-                padding="0.25rem 0.5rem"
-                borderRadius="0.25rem"
-              >
-                Download
-              </A>
-              <Button
-                onClick={() => handleDeletePiece(p.id)}
-                background="#555"
-                color="white"
-                padding="0.25rem 0.5rem"
-              >
-                Delete
-              </Button>
-            </Div>
-          ))}
-        </Div>
-      )}
+
+      {/* --- Reset confirm modal --- */}
       {showResetConfirm && (
         <div className="audio-modal">
           <Div
@@ -530,7 +565,7 @@ export default function Play() {
             gap="1rem"
             alignItems="center"
           >
-            <Span>Reset all settings to their defaults 2?</Span>
+            <Span>Reset all settings to their defaults?</Span>
             <Div display="flex" gap="1rem">
               <Button
                 onClick={handleResetSettings}
