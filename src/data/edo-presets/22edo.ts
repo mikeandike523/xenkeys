@@ -103,8 +103,6 @@ const keyDeclarations: Array<KeyDeclaration> = [
   // Todo: add better logic for z-index when we have multiple octaves
 ];
 
-console.log(microStepPointer)
-
 export function make22EDO(
   whiteKeyAppearance = defaultWhiteKeyAppearance,
   blackKeyAppearance = defaultBlackKeyAppearance,
