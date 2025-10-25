@@ -1,57 +1,57 @@
+// audio/synth.ts
 import type { Envelope, PitchSynthMessage, Waveform } from "../shared-types/audio-engine";
 
-/**
- * Synthesizer engine wrapping the AudioWorklet pitch-synth processor.
- */
 export default class Synth {
   private context: AudioContext;
   private node: AudioWorkletNode;
+  private streamDest: MediaStreamAudioDestinationNode; // <-- add
 
-  private constructor(ctx: AudioContext, node: AudioWorkletNode) {
+  private constructor(ctx: AudioContext, node: AudioWorkletNode, streamDest: MediaStreamAudioDestinationNode) {
     this.context = ctx;
     this.node = node;
+    this.streamDest = streamDest;
   }
 
-  /**
-   * Create and initialize the AudioContext and worklet node.
-   */
   static async create(): Promise<Synth> {
     const ctx = new AudioContext();
     await ctx.audioWorklet.addModule("/worklets/pitch-synth.worklet.js");
     const node = new AudioWorkletNode(ctx, "pitch-synth");
+
+    // Speakers
     node.connect(ctx.destination);
-    return new Synth(ctx, node);
+
+    // Recording tap
+    const streamDest = ctx.createMediaStreamDestination();
+    node.connect(streamDest);
+
+    return new Synth(ctx, node, streamDest);
   }
 
-  /**
-   * Resume audio context if not already running.
-   * Returns a promise that resolves when the audio context is running.
-   */
+  getMediaStream(): MediaStream {
+    return this.streamDest.stream;
+  }
+
   async resume(): Promise<void> {
     if (this.context.state !== "running") {
       await this.context.resume();
     }
   }
 
-  /** Trigger a note-on event (with envelope overrides). */
   noteOn(id: number, freq: number, envelope: Envelope): void {
     const msg: PitchSynthMessage = { type: "noteOn", data: { id, freq, envelope } };
     this.node.port.postMessage(msg);
   }
 
-  /** Trigger a note-off event. */
   noteOff(id: number): void {
     const msg: PitchSynthMessage = { type: "noteOff", data: { id } };
     this.node.port.postMessage(msg);
   }
 
-  /** Change the global waveform for new and ringing voices. */
   setWaveform(waveform: Waveform): void {
     const msg: PitchSynthMessage = { type: "waveform", data: waveform };
     this.node.port.postMessage(msg);
   }
 
-  /** Update the base ADSR envelope settings. */
   setEnvelope(env: Partial<Envelope>): void {
     const msg: PitchSynthMessage = { type: "setEnvelope", data: env };
     this.node.port.postMessage(msg);

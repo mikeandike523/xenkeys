@@ -1,4 +1,3 @@
-
 import {
   useRef,
   useState,
@@ -16,8 +15,7 @@ import {
   Select,
   Span,
 } from "style-props-html";
-import {FaHome} from 'react-icons/fa'
-
+import { FaHome } from "react-icons/fa";
 
 import { useElementRefBySelector } from "../hooks/fwk/useElementRefBySelector";
 import { useElementSize } from "../hooks/fwk/useElementSize";
@@ -37,6 +35,7 @@ import { make41EDO } from "../data/edo-presets/41edo";
 import { make48EDO } from "../data/edo-presets/48edo";
 import { whiteKeyAspect } from "../data/piano-key-dimensions";
 import { css } from "@emotion/react";
+import Recorder, { type Recording } from "../audio/recorder";
 
 const default12EdoManifest = make12EDO();
 const default19EdoManifest = make19EDO();
@@ -65,6 +64,14 @@ const defaultEnvelope: Envelope = {
   release: 0.5,
 };
 
+type SavedPiece = {
+  id: string;
+  name: string;
+  url: string; // object URL for playback / download
+  mimeType: string;
+  createdAt: number;
+};
+
 export default function Play() {
   const bodyRef = useElementRefBySelector<HTMLBodyElement>("body");
 
@@ -80,8 +87,9 @@ export default function Play() {
 
   const cpanelHeight = cpanelRefSize?.height || 0;
 
-  const [manifestName, setManifestName, resetManifestName] =
-    usePersistentState<keyof typeof manifestPresets>("manifestName", "12edo");
+  const [manifestName, setManifestName, resetManifestName] = usePersistentState<
+    keyof typeof manifestPresets
+  >("manifestName", "12edo");
   const [waveform, setWaveform, resetWaveform] = usePersistentState<Waveform>(
     "waveform",
     "sine"
@@ -92,6 +100,80 @@ export default function Play() {
   );
   const [synth, setSynth] = useState<Synth | null>(null);
   const [started, setStarted] = useState(false);
+
+  const [recorder, setRecorder] = useState<Recorder | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+
+  const [pieces, setPieces] = usePersistentState<SavedPiece[]>(
+    "savedPieces",
+    []
+  );
+
+  // Init synth (unchanged) + create Recorder
+  useEffect(() => {
+    Synth.create().then((s) => {
+      setSynth(s);
+      s.setWaveform(waveform);
+      s.setEnvelope(envelope);
+
+      try {
+        const r = new Recorder(s.getMediaStream());
+        setRecorder(r);
+      } catch (err) {
+        console.warn("Recorder unavailable:", err);
+        setRecorder(null);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Record controls
+  const handleRecordStart = useCallback(async () => {
+    if (!synth) return;
+    await synth.resume();
+    recorder?.start();
+    setIsRecording(true);
+  }, [synth, recorder]);
+
+  const handleRecordStop = useCallback(async () => {
+    if (!recorder) return;
+    const rec: Recording = await recorder.stop();
+    setIsRecording(false);
+
+    // Create a persistent-ish object URL for this session
+    const url = URL.createObjectURL(rec.blob);
+    const stamp = new Date(rec.createdAt);
+    const id = `${rec.createdAt}`;
+    const name = `Piece ${pieces.length + 1} — ${stamp.toLocaleString()}`;
+
+    const piece: SavedPiece = {
+      id,
+      name,
+      url,
+      mimeType: rec.mimeType,
+      createdAt: rec.createdAt,
+    };
+
+    setPieces([piece, ...pieces]);
+  }, [recorder, pieces, setPieces]);
+
+  const handleDeletePiece = useCallback(
+    (id: string) => {
+      setPieces((prev) => {
+        const keep = prev.filter((p) => p.id !== id);
+        // Revoke any object URLs we’re dropping
+        const dropped = prev.find((p) => p.id === id);
+        if (dropped) URL.revokeObjectURL(dropped.url);
+        return keep;
+      });
+    },
+    [setPieces]
+  );
+
+  useEffect(() => {
+  return () => pieces.forEach(p => URL.revokeObjectURL(p.url));
+}, []); // in Play.tsx
+
   const [startingOctave, setStartingOctave, resetStartingOctave] =
     usePersistentState<number>("startingOctave", 4);
   const [octaveCount, setOctaveCount, resetOctaveCount] =
@@ -198,25 +280,28 @@ export default function Play() {
         overflowX="auto"
         gap="0.5rem"
       >
-        <A href="/" css={
-          css`
-          color: black;
-          cursor: pointer;
-          user-select: none;
-          &:visited {
+        <A
+          href="/"
+          css={css`
             color: black;
-          }
-          font-size: 2rem;
-          background: white;
-          border: 2px solid black;
-          border-radius:50%;
-          width: 2.5rem;
-          height: 2.5rem;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          `
-        }><FaHome/></A>
+            cursor: pointer;
+            user-select: none;
+            &:visited {
+              color: black;
+            }
+            font-size: 2rem;
+            background: white;
+            border: 2px solid black;
+            border-radius: 50%;
+            width: 2.5rem;
+            height: 2.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          `}
+        >
+          <FaHome />
+        </A>
 
         <Button onClick={() => setShowResetConfirm(true)} padding="0.5rem">
           Reset All Settings
@@ -331,7 +416,30 @@ export default function Play() {
           onChange={setOctaveCount}
           min={1}
         />
-
+        {/* --- Recording Controls --- */}
+        <Div display="flex" gap="0.5rem" marginLeft="auto">
+          {!isRecording ? (
+            <Button
+              onClick={handleRecordStart}
+              background="#d32f2f"
+              color="white"
+              padding="0.5rem 1rem"
+              title="Start recording"
+            >
+              ● Record
+            </Button>
+          ) : (
+            <Button
+              onClick={handleRecordStop}
+              background="#2e7d32"
+              color="white"
+              padding="0.5rem 1rem"
+              title="Stop recording"
+            >
+              ■ Stop
+            </Button>
+          )}
+        </Div>
       </Header>
       <Main
         width="100%"
@@ -365,6 +473,51 @@ export default function Play() {
         <div className="audio-modal" onClick={handleStart}>
           <span>Click to Start Audio</span>
         </div>
+      )}
+      {/* --- Pieces shelf --- */}
+      {pieces.length > 0 && (
+        <Div
+          background="#111"
+          color="white"
+          padding="0.75rem"
+          display="flex"
+          flexDirection="column"
+          gap="0.75rem"
+        >
+          <Span fontWeight="bold" fontSize="1.25rem">Your Pieces</Span>
+          {pieces.map((p) => (
+            <Div
+              key={p.id}
+              background="#222"
+              padding="0.75rem"
+              borderRadius="0.5rem"
+              display="flex"
+              alignItems="center"
+              gap="0.75rem"
+            >
+              <Span minWidth="12rem">{p.name}</Span>
+              <audio src={p.url} controls style={{ flex: 1 }} />
+              <A
+                href={p.url}
+                download={`${p.name}.${p.mimeType.includes("ogg") ? "ogg" : "webm"}`}
+                background="white"
+                color="black"
+                padding="0.25rem 0.5rem"
+                borderRadius="0.25rem"
+              >
+                Download
+              </A>
+              <Button
+                onClick={() => handleDeletePiece(p.id)}
+                background="#555"
+                color="white"
+                padding="0.25rem 0.5rem"
+              >
+                Delete
+              </Button>
+            </Div>
+          ))}
+        </Div>
       )}
       {showResetConfirm && (
         <div className="audio-modal">
