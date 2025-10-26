@@ -74,7 +74,6 @@ export default function Play() {
 
   const cpanelRefSize = useElementSize(cpanelRef);
 
-  const bodyWidth = bodySize?.width || 0;
   const bodyHeight = bodySize?.height || 0;
   const cpanelHeight = cpanelRefSize?.height || 0;
 
@@ -225,12 +224,6 @@ export default function Play() {
     resetStartingOctave,
     resetOctaveCount,
   ]);
-
-  useEffect(() => {
-    if (bodyWidth > 0 && bodyHeight > 0) {
-      // no-op placeholder; sizing handled below
-    }
-  }, [bodyWidth, bodyHeight]);
 
   const manifest = manifestPresets[manifestName];
 
