@@ -17,7 +17,7 @@ export default function Compose() {
 
   const bodyHeight = bodySize?.height || 0;
   const cpanelHeight = cpanelSize?.height || 0;
-  const playAreaHeight = bodyHeight - cpanelHeight;
+  
 
   const codeEditorManager = useMonacoEditor();
 

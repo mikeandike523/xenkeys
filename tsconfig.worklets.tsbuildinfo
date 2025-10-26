@@ -1,1 +1,1 @@
-{"root":["./src/worklets/extra-glue-types.d.ts","./src/worklets/pitch-synth.worklet.ts","./src/shared-types/audio-engine.ts"],"version":"5.9.3"}
+{"root":["./src/worklets/extra-glue-types.d.ts","./src/worklets/pitch-synth.worklet.ts","./src/shared-types/livelogmanager.ts","./src/shared-types/monacomanager.ts","./src/shared-types/audio-engine.ts"],"version":"5.9.3"}
