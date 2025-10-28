@@ -3,7 +3,6 @@ import { Route, Routes } from "react-router-dom";
 import { Suspense, lazy } from "react";
 
 import "./App.css";
-import PageLoadingGradient from "@/components/PageLoadingGradient";
 
 // ✅ Lazy load each page
 const PageHome = lazy(() => import("./pages/Home"));
