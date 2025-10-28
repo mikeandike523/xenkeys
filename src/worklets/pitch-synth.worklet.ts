@@ -17,7 +17,7 @@ import {
   Envelope,
   PitchSynthMessage,
   Waveform
-} from "@shared-types/audio-engine";
+} from "@/shared-types/audio-engine";
 
 type VoiceState = 'idle' | 'attack' | 'decay' | 'sustain' | 'release';
 

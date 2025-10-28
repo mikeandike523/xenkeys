@@ -56,4 +56,11 @@ export default class Synth {
     const msg: PitchSynthMessage = { type: "setEnvelope", data: env };
     this.node.port.postMessage(msg);
   }
+
+  setVolume(v01: number): void {
+    const p = this.node.parameters.get("volume");
+    if (!p) return;
+    // snap for now; could use setTargetAtTime for smoothing
+    p.setValueAtTime(Math.max(0, Math.min(1, v01)), this.context.currentTime);
+  }
 }

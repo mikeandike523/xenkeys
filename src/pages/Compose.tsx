@@ -6,6 +6,8 @@ import { useElementRefBySelector } from "../hooks/fwk/useElementRefBySelector";
 import { useElementSize } from "../hooks/fwk/useElementSize";
 import useMonacoEditor from "../hooks/useMonacoEditor";
 import MonacoView from "../components/MonacoView";
+import { usePersistentState } from "../hooks/fwk/usePersistentState";
+import VolumeSlider from "../components/VolumeSlider";
 
 export default function Compose() {
   const bodyRef = useElementRefBySelector<HTMLBodyElement>("body");
@@ -17,9 +19,10 @@ export default function Compose() {
 
   const bodyHeight = bodySize?.height || 0;
   const cpanelHeight = cpanelSize?.height || 0;
-  
 
   const codeEditorManager = useMonacoEditor();
+
+  const [volumePct, setVolumePct] = usePersistentState<number>("volume", 80);
 
   return (
     <>
@@ -56,6 +59,10 @@ export default function Compose() {
         >
           <FaHome />
         </A>
+
+        <Div display="flex" alignItems="center">
+          <VolumeSlider value={volumePct} onChange={setVolumePct} />
+        </Div>
       </Header>
       <Main
         ref={playAreaRef}

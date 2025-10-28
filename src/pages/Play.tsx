@@ -36,6 +36,7 @@ import { make48EDO } from "../data/edo-presets/48edo";
 import { whiteKeyAspect } from "../data/piano-key-dimensions";
 import { css } from "@emotion/react";
 import Recorder, { type Recording } from "../audio/recorder";
+import VolumeSlider from "../components/VolumeSlider";
 
 const default12EdoManifest = make12EDO();
 const default19EdoManifest = make19EDO();
@@ -103,6 +104,12 @@ export default function Play() {
   // Playback bounds (simple: always 0..duration; pause at end when bounded)
   const [playbackStart] = useState<number>(0);
   const [playbackEnd, setPlaybackEnd] = useState<number | null>(null);
+
+  const [volumePct, setVolumePct] = usePersistentState<number>("volume", 80);
+
+  useEffect(() => {
+    if (synth) synth.setVolume(volumePct / 100);
+  }, [synth, volumePct]);
 
   // Init synth + recorder exactly once
   useEffect(() => {
@@ -314,6 +321,10 @@ export default function Play() {
         >
           <FaHome />
         </A>
+
+        <Div display="flex" alignItems="center">
+          <VolumeSlider value={volumePct} onChange={setVolumePct} />
+        </Div>
 
         <Button onClick={() => setShowResetConfirm(true)} padding="0.5rem">
           Reset All Settings
