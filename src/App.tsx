@@ -1,20 +1,24 @@
-import {  Route, Routes } from "react-router-dom";
+// App.tsx
+import { Route, Routes } from "react-router-dom";
+import { Suspense, lazy } from "react";
 
 import "./App.css";
+import PageLoadingGradient from "@/components/PageLoadingGradient";
 
-import PageHome from "./pages/Home";
-import PagePlay from "./pages/Play"; 
-import PageCompose from "./pages/Compose";
+// ✅ Lazy load each page
+const PageHome = lazy(() => import("./pages/Home"));
+const PagePlay = lazy(() => import("./pages/Play"));
+const PageCompose = lazy(() => import("./pages/Compose"));
 
-export default function App(){
-    return <Routes>
-
-        {/* Home Page */}
+export default function App() {
+  return (
+    // ✅ Wrap in <Suspense> to show a fallback while chunk loads
+    <Suspense fallback={<></>}>
+      <Routes>
         <Route path="/" element={<PageHome />} />
-        {/* Play Page */}
         <Route path="/play" element={<PagePlay />} />
-        {/* Compose Page */}
         <Route path="/compose" element={<PageCompose />} />
-    </Routes>
-   
+      </Routes>
+    </Suspense>
+  );
 }
