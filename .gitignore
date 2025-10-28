@@ -24,4 +24,4 @@ dist-ssr
 *.sw?
 
 # cs4ai output
-prompt.txt
+codebase-dump.txt

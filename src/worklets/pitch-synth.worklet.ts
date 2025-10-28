@@ -40,6 +40,8 @@ const RMS_NUM_CYCLES = 1;
 
 const AVG_EXPECTED_SIMULTANEOUS_VOICES = 6;
 
+const DEFAULT_POLYPHONY = 16; // 16 might be a bit much depending on computer. Consider changing to 12
+
 // --- Utilities ---------------------------------------------------------------
 
 const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
@@ -273,7 +275,7 @@ class PitchSynthProcessor extends AudioWorkletProcessor {
     super();
 
     // Default polyphony: 16
-    this.resizeVoices(16);
+    this.resizeVoices(DEFAULT_POLYPHONY);
 
     this.port.onmessage = (e: MessageEvent<PitchSynthMessage>) => {
       const msg = e.data;
