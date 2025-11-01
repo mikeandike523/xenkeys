@@ -3,6 +3,7 @@ import {
   useState,
   useEffect,
   useCallback,
+  useMemo,
   type ChangeEvent,
 } from "react";
 import {
@@ -63,6 +64,28 @@ const defaultEnvelope: Envelope = {
   decay: 0.1,
   sustain: 0.7,
   release: 0.5,
+};
+
+// --- Remote Play types/state (UI-first with stubbed logic) ---
+type RemoteStatus =
+  | "off"
+  | "sender_armed"
+  | "receiver_armed"
+  | "connecting"
+  | "connected"
+  | "error";
+
+type RemoteInfo = {
+  ip: string;
+  hostname: string;
+  password: string; // Provided by backend alongside initial connection request
+  room: string; // Provided by backend alongside initial connection request
+};
+
+type RemotePlayState = {
+  status: RemoteStatus;
+  info: RemoteInfo | null;
+  errorMessage?: string | null;
 };
 
 export default function Play() {
@@ -141,6 +164,11 @@ export default function Play() {
   useEffect(() => {
     if (synth) synth.setEnvelope(envelope);
   }, [synth, envelope]);
+
+  const backendBase = useMemo(() => {
+    const { protocol, hostname } = window.location;
+    return `${protocol}//${hostname}:8080`;
+  }, []);
 
   // Utility: hard reset playhead & reload the element to avoid scrubber glitches
   const resetPlayhead = useCallback(() => {
@@ -286,6 +314,77 @@ export default function Play() {
     return () => el.removeEventListener("timeupdate", onTimeUpdate);
   }, [playbackStart, playbackEnd]);
 
+  // ---------------- Remote Play UI State + Stubs ----------------
+  const [showRemoteDialog, setShowRemoteDialog] = useState(false);
+  const [remote, setRemote] = usePersistentState<RemotePlayState>(
+    "remotePlay",
+    { status: "off", info: null }
+  );
+
+  const openRemoteDialog = useCallback(() => setShowRemoteDialog(true), []);
+  const closeRemoteDialog = useCallback(() => setShowRemoteDialog(false), []);
+
+  const turnRemoteOff = useCallback(() => {
+    setRemote({ status: "off", info: null });
+  }, [setRemote]);
+
+  const armAsReceiver = useCallback(() => {
+    // Placeholder: user chose to act as receiver.
+    setRemote({ status: "receiver_armed", info: null });
+    // In real implementation, start handshake with special socket server backend.
+  }, [setRemote]);
+
+  const armAsSender = useCallback(() => {
+    // Placeholder: user chose to act as sender.
+    setRemote({ status: "sender_armed", info: null });
+    // In real implementation, start handshake with special socket server backend.
+  }, [setRemote]);
+
+  const beginRemoteHandshake = useCallback(async () => {
+    setRemote((prev) => ({
+      ...prev,
+      status: "connecting",
+      errorMessage: null,
+    }));
+    try {
+      const role =
+        (remote.status === "sender_armed" && "sender") ||
+        (remote.status === "receiver_armed" && "receiver") ||
+        "peer";
+
+      const res = await fetch(`${backendBase}/connection`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const data = await res.json();
+      const ip =
+        data?.net?.primary_ip ?? data?.net?.all_ips?.[0] ?? "127.0.0.1";
+      const hostname = data?.net?.hostname ?? "localhost";
+      const password = data?.password ?? "unknown";
+      const room = data?.room ?? "unknown";
+
+      setRemote({
+        status: "connected",
+        info: { ip, hostname, password, room },
+        errorMessage: null,
+      });
+    } catch (err: any) {
+      setRemote({
+        status: "error",
+        info: null,
+        errorMessage: err?.message || "Failed to reach remote play backend.",
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backendBase, remote.status, setRemote]);
+  const disconnectRemote = useCallback(() => {
+    // Placeholder: tell backend to disconnect, then clear local state
+    setRemote({ status: "off", info: null });
+  }, [setRemote]);
+
   return (
     <>
       <Header
@@ -328,6 +427,11 @@ export default function Play() {
 
         <Button onClick={() => setShowResetConfirm(true)} padding="0.5rem">
           Reset All Settings
+        </Button>
+
+        {/* --- New: Set up Remote Play button --- */}
+        <Button onClick={openRemoteDialog} padding="0.5rem">
+          Set up remote play
         </Button>
 
         <Select
@@ -588,6 +692,125 @@ export default function Play() {
                 Cancel
               </Button>
             </Div>
+          </Div>
+        </div>
+      )}
+
+      {/* --- Remote Play dialog --- */}
+      {showRemoteDialog && (
+        <div className="audio-modal" role="dialog" aria-modal="true">
+          <Div
+            background="white"
+            padding="1.5rem"
+            borderRadius="0.5rem"
+            display="flex"
+            flexDirection="column"
+            gap="0.75rem"
+            minWidth="20rem"
+            maxWidth="28rem"
+          >
+            <Div
+              display="flex"
+              justifyContent="space-between"
+              alignItems="center"
+            >
+              <Span style={{ fontWeight: 700 }}>Remote Play</Span>
+              <Button onClick={closeRemoteDialog}>Close</Button>
+            </Div>
+
+            {/* Status block */}
+            {remote.status === "off" && (
+              <>
+                <Span>remote play is off</Span>
+                <Div display="flex" gap="0.5rem" flexWrap="wrap">
+                  {/* Intentionally keeping the original label casing/spelling */}
+                  <Button onClick={armAsReceiver}>
+                    Set up as remote play reciever
+                  </Button>
+                  <Button onClick={armAsSender}>
+                    set up as remote play sender
+                  </Button>
+                </Div>
+              </>
+            )}
+
+            {(remote.status === "sender_armed" ||
+              remote.status === "receiver_armed") && (
+              <>
+                <Span>
+                  {remote.status === "sender_armed"
+                    ? "Sender selected."
+                    : "Receiver selected."}{" "}
+                  Both peers will handshake with a special socket server backend
+                  (no direct sender/receiver handshake).
+                </Span>
+                <Div display="flex" gap="0.5rem">
+                  <Button onClick={beginRemoteHandshake}>
+                    Begin handshake
+                  </Button>
+                  <Button background="#eee" onClick={turnRemoteOff}>
+                    Back
+                  </Button>
+                </Div>
+              </>
+            )}
+
+            {remote.status === "connecting" && (
+              <>
+                <Span>Connecting to remote play…</Span>
+                <Span style={{ fontSize: "0.9rem", opacity: 0.7 }}>
+                  Placeholder: awaiting backend to return connection info.
+                </Span>
+                <Button background="#eee" onClick={turnRemoteOff}>
+                  Cancel
+                </Button>
+              </>
+            )}
+
+            {remote.status === "connected" && remote.info && (
+              <>
+                <Span style={{ fontWeight: 600 }}>Connected</Span>
+                <Div
+                  background="#f6f6f6"
+                  padding="0.75rem"
+                  borderRadius="0.375rem"
+                  display="flex"
+                  flexDirection="column"
+                  gap="0.25rem"
+                >
+                  <Span>
+                    <strong>Room:</strong> {remote.info.room}
+                  </Span>
+                  <Span>
+                    <strong>IP:</strong> {remote.info.ip}
+                  </Span>
+                  <Span>
+                    <strong>Hostname:</strong> {remote.info.hostname}
+                  </Span>
+                  <Span>
+                    <strong>Password:</strong> {remote.info.password}
+                  </Span>
+                </Div>
+                <Div display="flex" gap="0.5rem">
+                  <Button onClick={disconnectRemote}>Disconnect</Button>
+                  <Button onClick={closeRemoteDialog}>Close</Button>
+                </Div>
+              </>
+            )}
+
+            {remote.status === "error" && (
+              <>
+                <Span style={{ color: "#b00020" }}>
+                  {remote.errorMessage || "Remote play error (placeholder)."}
+                </Span>
+                <Div display="flex" gap="0.5rem">
+                  <Button onClick={beginRemoteHandshake}>Retry</Button>
+                  <Button background="#eee" onClick={turnRemoteOff}>
+                    Turn off
+                  </Button>
+                </Div>
+              </>
+            )}
           </Div>
         </div>
       )}

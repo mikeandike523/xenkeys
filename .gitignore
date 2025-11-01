@@ -25,3 +25,5 @@ dist-ssr
 
 # cs4ai output
 codebase-dump.txt
+
+.venv

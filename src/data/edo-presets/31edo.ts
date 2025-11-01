@@ -149,8 +149,9 @@ export function make31EDO(
       440,
       31,
       4,
-
-      4 + 1 + 2 + 1
+      // Number of microtones **traveled** to **land at** C from the A below,
+      // for instance in 12edo this is 3: A-A#, A#-B, B-C, in 31edo we have 4 + 1 + 2 + 1 = 8
+      4 + 1 + 2 + 1 
     ),
   };
 }
