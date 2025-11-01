@@ -893,6 +893,9 @@ export default function Play() {
                     <label>
                       IP / Host:
                       <input
+                        autoCapitalize="off"
+                        autoComplete="off"
+                        autoCorrect="off"
                         value={senderIp}
                         onChange={(e) => setSenderIp(e.target.value)}
                         placeholder="e.g. 192.168.1.23"
@@ -901,6 +904,9 @@ export default function Play() {
                     <label>
                       Room:
                       <input
+                        autoCapitalize="off"
+                        autoComplete="off"
+                        autoCorrect="off"
                         value={senderRoom}
                         onChange={(e) => setSenderRoom(e.target.value)}
                         placeholder="room id"
@@ -909,6 +915,9 @@ export default function Play() {
                     <label>
                       Password:
                       <input
+                        autoCapitalize="off"
+                        autoComplete="off"
+                        autoCorrect="off"
                         value={senderPassword}
                         onChange={(e) => setSenderPassword(e.target.value)}
                         placeholder="password"
