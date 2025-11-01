@@ -38,6 +38,8 @@ import { whiteKeyAspect } from "../data/piano-key-dimensions";
 import { css } from "@emotion/react";
 import Recorder, { type Recording } from "../audio/recorder";
 import VolumeSlider from "../components/VolumeSlider";
+import { connectSocket, joinRoom, subscribe, publish } from "../remote/socket";
+import type { SettingsSyncPayload } from "../shared-types/remote";
 
 const default12EdoManifest = make12EDO();
 const default19EdoManifest = make19EDO();
@@ -129,6 +131,9 @@ export default function Play() {
   const [playbackEnd, setPlaybackEnd] = useState<number | null>(null);
 
   const [volumePct, setVolumePct] = usePersistentState<number>("volume", 80);
+
+  const socketRef = useRef<ReturnType<typeof connectSocket> | null>(null);
+  const clientIdRef = useRef<string>("");
 
   useEffect(() => {
     if (synth) synth.setVolume(volumePct / 100);
@@ -371,6 +376,49 @@ export default function Play() {
         info: { ip, hostname, password, room },
         errorMessage: null,
       });
+      if (
+        remote.status === "sender_armed" ||
+        remote.status === "receiver_armed"
+      ) {
+        const info = { ...data, room, password }; // we already have room/password above
+
+        // 1) Connect the socket
+        const sock = connectSocket(backendBase);
+        socketRef.current = sock;
+
+        // 2) Join the room
+        const joined = await joinRoom(sock, {
+          room,
+          password,
+          // optional: re-use a persistent id if you want
+        });
+        clientIdRef.current = joined.client_id;
+
+        // 3) Subscribe to channels we care about
+        await subscribe(sock, { room, channels: ["settings-sync"] });
+
+        // 4) If we are the SENDER, immediately publish the settings
+        const iAmSender = remote.status === "sender_armed";
+        if (iAmSender) {
+          const payload: SettingsSyncPayload = {
+            kind: "settings-sync",
+            manifestName,
+            waveform,
+            envelope,
+            volumePct,
+            startingOctave,
+            octaveCount,
+          };
+
+          await publish(sock, {
+            room,
+            password,
+            client_id: clientIdRef.current,
+            channel: "settings-sync",
+            message: JSON.stringify(payload),
+          });
+        }
+      }
     } catch (err: any) {
       setRemote({
         status: "error",
@@ -384,6 +432,44 @@ export default function Play() {
     // Placeholder: tell backend to disconnect, then clear local state
     setRemote({ status: "off", info: null });
   }, [setRemote]);
+
+  useEffect(() => {
+    const sock = socketRef.current;
+    if (!sock) return;
+
+    const onMessage = (evt: any) => {
+      try {
+        // Backend wraps deliveries as { type:"message", channel, text, ... }
+        if (evt?.type !== "message") return;
+        if (evt?.channel !== "settings-sync") return;
+
+        const parsed = JSON.parse(String(evt.text || "{}"));
+        if (parsed?.kind !== "settings-sync") return;
+
+        // Apply: make the receiver mirror the sender
+        setManifestName(parsed.manifestName);
+        setWaveform(parsed.waveform);
+        setEnvelope(parsed.envelope);
+        setVolumePct(parsed.volumePct);
+        setStartingOctave(parsed.startingOctave);
+        setOctaveCount(parsed.octaveCount);
+      } catch {
+        /* ignore bad payloads */
+      }
+    };
+
+    sock.on("message", onMessage);
+    return () => {
+      sock.off("message", onMessage);
+    };
+  }, [
+    setManifestName,
+    setWaveform,
+    setEnvelope,
+    setVolumePct,
+    setStartingOctave,
+    setOctaveCount,
+  ]);
 
   return (
     <>
