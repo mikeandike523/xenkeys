@@ -281,11 +281,16 @@ export default function Play() {
     status: "off",
     info: null,
   });
+  // track remote key press state for visuals
+  const [remotePressedIds, setRemotePressedIds] = useState<number[]>([]);
 
   const onIdPress = useCallback(
     (id: number, pitch: number) => {
+    // local playback unless acting as remote sender
+    if (!(remote.status === "connected" && roleRef.current === "sender")) {
       synth?.resume();
       synth?.noteOn(id, pitch, envelope);
+    }
       // Remote sender: publish note-on to playback channel
       const sock = socketRef.current;
       if (
@@ -310,7 +315,10 @@ export default function Play() {
 
   const onIdRelease = useCallback(
     (id: number) => {
-      synth?.noteOff(id);
+      // local stop unless acting as remote sender
+      if (!(remote.status === "connected" && roleRef.current === "sender")) {
+        synth?.noteOff(id);
+      }
       // Remote sender: publish note-off to playback channel
       const sock = socketRef.current;
       if (
@@ -514,8 +522,13 @@ export default function Play() {
         if (evt.channel === "playback") {
           const msg = JSON.parse(String(evt.text || "{}"));
           if (msg.type === "noteOn") {
+            // reflect remote press in visuals
+            setRemotePressedIds((prev) =>
+              prev.includes(msg.data.id) ? prev : [...prev, msg.data.id]
+            );
             onIdPress(msg.data.id, msg.data.freq);
           } else if (msg.type === "noteOff") {
+            setRemotePressedIds((prev) => prev.filter((i) => i !== msg.data.id));
             onIdRelease(msg.data.id);
           }
           return;
@@ -844,6 +857,7 @@ export default function Play() {
               octaveCount={octaveCount}
               onIdPress={onIdPress}
               onIdRelease={onIdRelease}
+              externalPressedIds={remotePressedIds}
               width={targetKeyboardWidth}
               height={targetKeyboardHeight}
             />

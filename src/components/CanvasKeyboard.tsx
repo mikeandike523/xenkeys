@@ -17,6 +17,10 @@ export interface CanvasKeyboardProps extends React.CanvasHTMLAttributes<HTMLCanv
   pressAnimationDuration?: number; // (kept for compatibility)
   onIdPress: (pitchId: number, pitch: number) => void;
   onIdRelease: (pitchId: number) => void;
+  /**
+   * External key press state (e.g. remote events), merged with local presses for visuals.
+   */
+  externalPressedIds?: number[];
   top?: number | string;
   left?: number | string;
 }
@@ -283,6 +287,7 @@ export default forwardRef<HTMLCanvasElement, CanvasKeyboardProps>(function Canva
     pressAnimationDuration = 100, // preserved; currently unused by draw loop
     onIdPress,
     onIdRelease,
+    externalPressedIds,
     top = 0,
     left = 0,
     style,
@@ -391,10 +396,17 @@ export default forwardRef<HTMLCanvasElement, CanvasKeyboardProps>(function Canva
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    drawScene(ctx, layoutRef.current, S, pressedKeys.current);
+    // merge local pointer presses with external pressed IDs for drawing
+    const allPressed = new Set<number>(pressedKeys.current);
+    if (externalPressedIds) {
+      for (const id of externalPressedIds) {
+        allPressed.add(id);
+      }
+    }
+    drawScene(ctx, layoutRef.current, S, allPressed);
 
     ctx.restore();
-  }, [rebuildLayout, height]);
+  }, [rebuildLayout, height, externalPressedIds]);
 
   // Ensure intrinsic canvas size matches CSS size
   useEffect(() => {
@@ -412,6 +424,11 @@ export default forwardRef<HTMLCanvasElement, CanvasKeyboardProps>(function Canva
     rebuildLayout();
     redraw();
   }, [rebuildLayout, redraw]);
+
+  // Redraw when external pressed state changes (e.g. remote key events)
+  useEffect(() => {
+    redraw();
+  }, [externalPressedIds, redraw]);
 
   // Pointer handlers use cached hit-testing (multi-octave aware)
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
