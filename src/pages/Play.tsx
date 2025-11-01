@@ -380,7 +380,7 @@ export default function Play() {
         password = senderPassword.trim();
         socketBase = `http://${ip}:8080`;
       } else {
-        // --- receiver (unchanged): ask backend for details ---
+        // --- receiver: ask backend for details ---
         const res = await fetch(`${backendBase}/connection`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -409,8 +409,12 @@ export default function Play() {
 
       const joined = await joinRoom(sock, { room, password });
       setClientId(joined.client_id);
-      // subscribe to the settings-sync channel
-      await subscribe(sock, { room, channels: ["settings-sync"] });
+
+      // Only the receiver subscribes to settings-sync
+      if (role === "receiver") {
+        await subscribe(sock, { room, channels: ["settings-sync"] });
+        console.log("[SUBSCRIBED] settings-sync");
+      }
 
       // initial push will now be handled by the useEffect below
     } catch (err: any) {
@@ -429,21 +433,31 @@ export default function Play() {
     senderRoom,
     senderPassword,
   ]);
+
   const disconnectRemote = useCallback(() => {
-    // Placeholder: tell backend to disconnect, then clear local state
+    // Optional: sock cleanup
+    const s = socketRef.current;
+    if (s) {
+      try {
+        s.disconnect?.();
+      } catch {}
+      socketRef.current = null;
+    }
     setRemote({ status: "off", info: null });
   }, [setRemote]);
 
+  // Receiver-only listener attachment
   useEffect(() => {
     const sock = socketRef.current;
     if (!sock) return;
+    if (remote.status !== "connected") return;
+    if (roleRef.current !== "receiver") return;
+
+    console.log("Attaching socket listeners (receiver)…");
 
     const onMessage = (evt: any) => {
       try {
         // Backend wraps deliveries as { type:"message", channel, text, ... }
-
-        console.log("Received message:", evt);
-
         if (evt?.type !== "message") return;
         if (evt?.channel !== "settings-sync") return;
 
@@ -467,6 +481,7 @@ export default function Play() {
       sock.off("message", onMessage);
     };
   }, [
+    remote.status,
     setManifestName,
     setWaveform,
     setEnvelope,
@@ -475,14 +490,14 @@ export default function Play() {
     setOctaveCount,
   ]);
 
+  // Sender-only publish
   useEffect(() => {
-    console.log("Settings changed or clientId was changed");
-
     const sock = socketRef.current;
     const info = remote.info;
     const iAmSender = roleRef.current === "sender";
 
     if (!sock || !info || remote.status !== "connected" || !iAmSender) return;
+    if (!clientId) return; // wait for clientId to be set
 
     const payload: SettingsSyncPayload = {
       kind: "settings-sync",
@@ -493,8 +508,6 @@ export default function Play() {
       startingOctave,
       octaveCount,
     };
-
-    if (!clientId) return; // wait for clientId to be set
 
     publish(sock, {
       room: info.room,
