@@ -133,7 +133,13 @@ export default function Play() {
   const [volumePct, setVolumePct] = usePersistentState<number>("volume", 80);
 
   const socketRef = useRef<ReturnType<typeof connectSocket> | null>(null);
-  const clientIdRef = useRef<string>("");
+  const [clientId, setClientId] = useState<string | null>(null);
+
+  const [senderIp, setSenderIp] = useState("");
+  const [senderRoom, setSenderRoom] = useState("");
+  const [senderPassword, setSenderPassword] = useState("");
+
+  const roleRef = useRef<"sender" | "receiver" | "peer">("peer");
 
   useEffect(() => {
     if (synth) synth.setVolume(volumePct / 100);
@@ -321,10 +327,10 @@ export default function Play() {
 
   // ---------------- Remote Play UI State + Stubs ----------------
   const [showRemoteDialog, setShowRemoteDialog] = useState(false);
-  const [remote, setRemote] = usePersistentState<RemotePlayState>(
-    "remotePlay",
-    { status: "off", info: null }
-  );
+  const [remote, setRemote] = useState<RemotePlayState>({
+    status: "off",
+    info: null,
+  });
 
   const openRemoteDialog = useCallback(() => setShowRemoteDialog(true), []);
   const closeRemoteDialog = useCallback(() => setShowRemoteDialog(false), []);
@@ -332,17 +338,14 @@ export default function Play() {
   const turnRemoteOff = useCallback(() => {
     setRemote({ status: "off", info: null });
   }, [setRemote]);
-
   const armAsReceiver = useCallback(() => {
-    // Placeholder: user chose to act as receiver.
+    roleRef.current = "receiver";
     setRemote({ status: "receiver_armed", info: null });
-    // In real implementation, start handshake with special socket server backend.
   }, [setRemote]);
 
   const armAsSender = useCallback(() => {
-    // Placeholder: user chose to act as sender.
+    roleRef.current = "sender";
     setRemote({ status: "sender_armed", info: null });
-    // In real implementation, start handshake with special socket server backend.
   }, [setRemote]);
 
   const beginRemoteHandshake = useCallback(async () => {
@@ -351,83 +354,81 @@ export default function Play() {
       status: "connecting",
       errorMessage: null,
     }));
+
     try {
+      // figure out the role once up front
       const role =
+        roleRef.current ||
         (remote.status === "sender_armed" && "sender") ||
         (remote.status === "receiver_armed" && "receiver") ||
         "peer";
 
-      const res = await fetch(`${backendBase}/connection`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      let ip = "";
+      let hostname = "";
+      let room = "";
+      let password = "";
+      let socketBase = "";
 
-      const data = await res.json();
-      const ip =
-        data?.net?.primary_ip ?? data?.net?.all_ips?.[0] ?? "127.0.0.1";
-      const hostname = data?.net?.hostname ?? "localhost";
-      const password = data?.password ?? "unknown";
-      const room = data?.room ?? "unknown";
+      if (role === "sender") {
+        // --- sender uses the manually-entered info ---
+        if (!senderIp || !senderRoom || !senderPassword) {
+          throw new Error("Please enter IP, room, and password.");
+        }
+        ip = senderIp.trim();
+        hostname = senderIp.trim();
+        room = senderRoom.trim();
+        password = senderPassword.trim();
+        socketBase = `http://${ip}:8080`;
+      } else {
+        // --- receiver (unchanged): ask backend for details ---
+        const res = await fetch(`${backendBase}/connection`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ role }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
 
+        ip = data?.net?.primary_ip ?? data?.net?.all_ips?.[0] ?? "127.0.0.1";
+        hostname = data?.net?.hostname ?? "localhost";
+        password = data?.password ?? "unknown";
+        room = data?.room ?? "unknown";
+        socketBase = backendBase;
+      }
+
+      // update UI summary
       setRemote({
         status: "connected",
         info: { ip, hostname, password, room },
         errorMessage: null,
       });
-      if (
-        remote.status === "sender_armed" ||
-        remote.status === "receiver_armed"
-      ) {
-        const info = { ...data, room, password }; // we already have room/password above
 
-        // 1) Connect the socket
-        const sock = connectSocket(backendBase);
-        socketRef.current = sock;
+      // open socket + join
+      const sock = connectSocket(socketBase);
+      socketRef.current = sock;
 
-        // 2) Join the room
-        const joined = await joinRoom(sock, {
-          room,
-          password,
-          // optional: re-use a persistent id if you want
-        });
-        clientIdRef.current = joined.client_id;
+      const joined = await joinRoom(sock, { room, password });
+      setClientId(joined.client_id);
+      // subscribe to the settings-sync channel
+      await subscribe(sock, { room, channels: ["settings-sync"] });
 
-        // 3) Subscribe to channels we care about
-        await subscribe(sock, { room, channels: ["settings-sync"] });
-
-        // 4) If we are the SENDER, immediately publish the settings
-        const iAmSender = remote.status === "sender_armed";
-        if (iAmSender) {
-          const payload: SettingsSyncPayload = {
-            kind: "settings-sync",
-            manifestName,
-            waveform,
-            envelope,
-            volumePct,
-            startingOctave,
-            octaveCount,
-          };
-
-          await publish(sock, {
-            room,
-            password,
-            client_id: clientIdRef.current,
-            channel: "settings-sync",
-            message: JSON.stringify(payload),
-          });
-        }
-      }
+      // initial push will now be handled by the useEffect below
     } catch (err: any) {
       setRemote({
         status: "error",
         info: null,
-        errorMessage: err?.message || "Failed to reach remote play backend.",
+        errorMessage: err?.message || "Remote play connection failed.",
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [backendBase, remote.status, setRemote]);
+  }, [
+    backendBase,
+    remote.status,
+    setRemote,
+    senderIp,
+    senderRoom,
+    senderPassword,
+  ]);
   const disconnectRemote = useCallback(() => {
     // Placeholder: tell backend to disconnect, then clear local state
     setRemote({ status: "off", info: null });
@@ -440,6 +441,9 @@ export default function Play() {
     const onMessage = (evt: any) => {
       try {
         // Backend wraps deliveries as { type:"message", channel, text, ... }
+
+        console.log("Received message:", evt);
+
         if (evt?.type !== "message") return;
         if (evt?.channel !== "settings-sync") return;
 
@@ -469,6 +473,48 @@ export default function Play() {
     setVolumePct,
     setStartingOctave,
     setOctaveCount,
+  ]);
+
+  useEffect(() => {
+    console.log("Settings changed or clientId was changed");
+
+    const sock = socketRef.current;
+    const info = remote.info;
+    const iAmSender = roleRef.current === "sender";
+
+    if (!sock || !info || remote.status !== "connected" || !iAmSender) return;
+
+    const payload: SettingsSyncPayload = {
+      kind: "settings-sync",
+      manifestName,
+      waveform,
+      envelope,
+      volumePct,
+      startingOctave,
+      octaveCount,
+    };
+
+    if (!clientId) return; // wait for clientId to be set
+
+    publish(sock, {
+      room: info.room,
+      password: info.password,
+      client_id: clientId,
+      channel: "settings-sync",
+      message: JSON.stringify(payload),
+    }).catch(() => {
+      /* swallow publish errors for now */
+    });
+  }, [
+    remote.status,
+    remote.info, // when we first connect
+    manifestName,
+    waveform,
+    envelope,
+    volumePct,
+    startingOctave,
+    octaveCount, // whenever any setting changes
+    clientId,
   ]);
 
   return (
@@ -826,13 +872,43 @@ export default function Play() {
                 <Span>
                   {remote.status === "sender_armed"
                     ? "Sender selected."
-                    : "Receiver selected."}{" "}
-                  Both peers will handshake with a special socket server backend
-                  (no direct sender/receiver handshake).
+                    : "Receiver selected."}
                 </Span>
+
+                {remote.status === "sender_armed" && (
+                  <Div display="flex" flexDirection="column" gap="0.5rem">
+                    <label>
+                      IP / Host:
+                      <input
+                        value={senderIp}
+                        onChange={(e) => setSenderIp(e.target.value)}
+                        placeholder="e.g. 192.168.1.23"
+                      />
+                    </label>
+                    <label>
+                      Room:
+                      <input
+                        value={senderRoom}
+                        onChange={(e) => setSenderRoom(e.target.value)}
+                        placeholder="room id"
+                      />
+                    </label>
+                    <label>
+                      Password:
+                      <input
+                        value={senderPassword}
+                        onChange={(e) => setSenderPassword(e.target.value)}
+                        placeholder="password"
+                      />
+                    </label>
+                  </Div>
+                )}
+
                 <Div display="flex" gap="0.5rem">
                   <Button onClick={beginRemoteHandshake}>
-                    Begin handshake
+                    {remote.status === "sender_armed"
+                      ? "Connect as sender"
+                      : "Begin handshake"}
                   </Button>
                   <Button background="#eee" onClick={turnRemoteOff}>
                     Back
@@ -864,6 +940,9 @@ export default function Play() {
                   flexDirection="column"
                   gap="0.25rem"
                 >
+                  <Span>
+                    <strong>Client Id:</strong> {clientId}
+                  </Span>
                   <Span>
                     <strong>Room:</strong> {remote.info.room}
                   </Span>

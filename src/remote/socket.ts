@@ -42,6 +42,7 @@ export function subscribe(sock: Socket, args: SubscribeArgs): Promise<void> {
 
 export function publish(sock: Socket, args: PublishArgs): Promise<void> {
   return new Promise((resolve, reject) => {
+    console.log("Sending message: ", args.message);
     sock.emit("publish", args);
     const ok = () => { cleanup(); resolve(); };
     const bad = (p: any) => { cleanup(); reject(new Error(p?.error || "publish_failed")); };
