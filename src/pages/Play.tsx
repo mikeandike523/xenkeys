@@ -24,7 +24,7 @@ import { usePersistentState } from "../hooks/fwk/usePersistentState";
 
 import CanvasKeyboard from "../components/CanvasKeyboard";
 import { NumberStepper } from "../components/NumberStepper";
-import type { Waveform, Envelope } from "../shared-types/audio-engine";
+import type { Waveform, Envelope, NoteOnMsg, NoteOffMsg } from "../shared-types/audio-engine";
 import Synth from "../audio/synth";
 import { make12EDO } from "../data/edo-presets/12edo";
 import { make22EDO } from "../data/edo-presets/22edo";
@@ -277,19 +277,60 @@ export default function Play() {
   const currentPlayAreaWidth = playAreaSize?.width || 0;
   const currentPlayAreaHeight = playAreaSize?.height || 0;
 
+  const [remote, setRemote] = useState<RemotePlayState>({
+    status: "off",
+    info: null,
+  });
+
   const onIdPress = useCallback(
     (id: number, pitch: number) => {
       synth?.resume();
       synth?.noteOn(id, pitch, envelope);
+      // Remote sender: publish note-on to playback channel
+      const sock = socketRef.current;
+      if (
+        sock &&
+        remote.status === "connected" &&
+        roleRef.current === "sender" &&
+        remote.info &&
+        clientId
+      ) {
+        const msg: NoteOnMsg = { type: "noteOn", data: { id, freq: pitch, envelope } };
+        publish(sock, {
+          room: remote.info.room,
+          password: remote.info.password,
+          client_id: clientId,
+          channel: "playback",
+          message: JSON.stringify(msg),
+        }).catch(() => {});
+      }
     },
-    [synth, envelope]
+    [synth, envelope, remote.status, remote.info, clientId]
   );
 
   const onIdRelease = useCallback(
     (id: number) => {
       synth?.noteOff(id);
+      // Remote sender: publish note-off to playback channel
+      const sock = socketRef.current;
+      if (
+        sock &&
+        remote.status === "connected" &&
+        roleRef.current === "sender" &&
+        remote.info &&
+        clientId
+      ) {
+        const msg: NoteOffMsg = { type: "noteOff", data: { id } };
+        publish(sock, {
+          room: remote.info.room,
+          password: remote.info.password,
+          client_id: clientId,
+          channel: "playback",
+          message: JSON.stringify(msg),
+        }).catch(() => {});
+      }
     },
-    [synth]
+    [synth, remote.status, remote.info, clientId]
   );
 
   const handleStart = useCallback(async () => {
@@ -327,10 +368,7 @@ export default function Play() {
 
   // ---------------- Remote Play UI State + Stubs ----------------
   const [showRemoteDialog, setShowRemoteDialog] = useState(false);
-  const [remote, setRemote] = useState<RemotePlayState>({
-    status: "off",
-    info: null,
-  });
+
 
   const openRemoteDialog = useCallback(() => setShowRemoteDialog(true), []);
   const closeRemoteDialog = useCallback(() => setShowRemoteDialog(false), []);
@@ -410,10 +448,10 @@ export default function Play() {
       const joined = await joinRoom(sock, { room, password });
       setClientId(joined.client_id);
 
-      // Only the receiver subscribes to settings-sync
+      // Only the receiver subscribes to settings-sync and playback events
       if (role === "receiver") {
-        await subscribe(sock, { room, channels: ["settings-sync"] });
-        console.log("[SUBSCRIBED] settings-sync");
+        await subscribe(sock, { room, channels: ["settings-sync", "playback"] });
+        console.log("[SUBSCRIBED] settings-sync, playback");
       }
 
       // initial push will now be handled by the useEffect below
@@ -459,18 +497,29 @@ export default function Play() {
       try {
         // Backend wraps deliveries as { type:"message", channel, text, ... }
         if (evt?.type !== "message") return;
-        if (evt?.channel !== "settings-sync") return;
-
-        const parsed = JSON.parse(String(evt.text || "{}"));
-        if (parsed?.kind !== "settings-sync") return;
-
-        // Apply: make the receiver mirror the sender
-        setManifestName(parsed.manifestName);
-        setWaveform(parsed.waveform);
-        setEnvelope(parsed.envelope);
-        setVolumePct(parsed.volumePct);
-        setStartingOctave(parsed.startingOctave);
-        setOctaveCount(parsed.octaveCount);
+        // Handle settings sync
+        if (evt.channel === "settings-sync") {
+          const parsed = JSON.parse(String(evt.text || "{}"));
+          if (parsed?.kind !== "settings-sync") return;
+          // Apply: make the receiver mirror the sender settings
+          setManifestName(parsed.manifestName);
+          setWaveform(parsed.waveform);
+          setEnvelope(parsed.envelope);
+          setVolumePct(parsed.volumePct);
+          setStartingOctave(parsed.startingOctave);
+          setOctaveCount(parsed.octaveCount);
+          return;
+        }
+        // Handle playback events
+        if (evt.channel === "playback") {
+          const msg = JSON.parse(String(evt.text || "{}"));
+          if (msg.type === "noteOn") {
+            onIdPress(msg.data.id, msg.data.freq);
+          } else if (msg.type === "noteOff") {
+            onIdRelease(msg.data.id);
+          }
+          return;
+        }
       } catch {
         /* ignore bad payloads */
       }
@@ -488,6 +537,8 @@ export default function Play() {
     setVolumePct,
     setStartingOctave,
     setOctaveCount,
+    onIdPress,
+    onIdRelease,
   ]);
 
   // Sender-only publish
