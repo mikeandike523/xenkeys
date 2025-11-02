@@ -27,3 +27,5 @@ dist-ssr
 codebase-dump.txt
 
 .venv
+
+**/__pycache__
