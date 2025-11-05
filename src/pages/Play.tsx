@@ -1,11 +1,11 @@
 import {
+  useCallback,
+  useEffect,
   useRef,
   useState,
-  useEffect,
-  useCallback,
-  useMemo,
-  type ChangeEvent,
+  type ChangeEvent
 } from "react";
+import { FaHome } from "react-icons/fa";
 import {
   A,
   Button,
@@ -16,35 +16,34 @@ import {
   Select,
   Span,
 } from "style-props-html";
-import { FaHome } from "react-icons/fa";
 
 import { useElementRefBySelector } from "../hooks/fwk/useElementRefBySelector";
 import { useElementSize } from "../hooks/fwk/useElementSize";
 import { usePersistentState } from "../hooks/fwk/usePersistentState";
 
+import { css } from "@emotion/react";
+import Recorder, { type Recording } from "../audio/recorder";
+import Synth from "../audio/synth";
 import CanvasKeyboard from "../components/CanvasKeyboard";
 import { NumberStepper } from "../components/NumberStepper";
-import type {
-  Waveform,
-  Envelope,
-  NoteOnMsg,
-  NoteOffMsg,
-} from "../shared-types/audio-engine";
-import Synth from "../audio/synth";
+import VolumeSlider from "../components/VolumeSlider";
 import { make12EDO } from "../data/edo-presets/12edo";
-import { make22EDO } from "../data/edo-presets/22edo";
 import { make19EDO } from "../data/edo-presets/19edo";
+import { make22EDO } from "../data/edo-presets/22edo";
 import { make24EDO } from "../data/edo-presets/24edo";
 import { make31EDO } from "../data/edo-presets/31edo";
 import { make36EDO } from "../data/edo-presets/36edo";
 import { make41EDO } from "../data/edo-presets/41edo";
 import { make48EDO } from "../data/edo-presets/48edo";
 import { whiteKeyAspect } from "../data/piano-key-dimensions";
-import { css } from "@emotion/react";
-import Recorder, { type Recording } from "../audio/recorder";
-import VolumeSlider from "../components/VolumeSlider";
-import type { SettingsSyncPayload } from "../shared-types/remote";
 import { createReceiverPeer, createSenderPeer, type PeerConn } from "../remote/peer";
+import type {
+  Envelope,
+  NoteOffMsg,
+  NoteOnMsg,
+  Waveform,
+} from "../shared-types/audio-engine";
+import type { SettingsSyncPayload } from "../shared-types/remote";
 
 const default12EdoManifest = make12EDO();
 const default19EdoManifest = make19EDO();
