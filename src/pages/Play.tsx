@@ -85,8 +85,7 @@ type RemoteStatus =
 type RemoteInfo = {
   ip: string;
   hostname: string;
-  password: string; // Provided by backend alongside initial connection request
-  room: string; // Provided by backend alongside initial connection request
+  code: string; // Ephemeral invite code
 };
 
 type RemotePlayState = {
@@ -141,8 +140,6 @@ export default function Play() {
   const [clientId, setClientId] = useState<string | null>(null);
 
   const [senderIp, setSenderIp] = useState("");
-  const [senderRoom, setSenderRoom] = useState("");
-  const [senderPassword, setSenderPassword] = useState("");
 
   const roleRef = useRef<"sender" | "receiver" | "peer">("peer");
 
@@ -323,8 +320,7 @@ export default function Play() {
           data: { id, freq: pitch, envelope },
         };
         publish(sock, {
-          room: remote.info.room,
-          password: remote.info.password,
+          room: remote.info.code,
           client_id: clientId,
           channel: "playback",
           message: JSON.stringify(msg),
@@ -351,8 +347,7 @@ export default function Play() {
       ) {
         const msg: NoteOffMsg = { type: "noteOff", data: { id } };
         publish(sock, {
-          room: remote.info.room,
-          password: remote.info.password,
+          room: remote.info.code,
           client_id: clientId,
           channel: "playback",
           message: JSON.stringify(msg),
@@ -415,32 +410,18 @@ export default function Play() {
   }, [setRemote]);
 
   const beginRemoteHandshake = useCallback(async () => {
-    setRemote((prev) => ({
-      ...prev,
-      status: "connecting",
-      errorMessage: null,
-    }));
-
+    setRemote({ status: "connecting", info: null, errorMessage: null });
     try {
-      const role =
-        roleRef.current ||
-        (remote.status === "sender_armed" && "sender") ||
-        (remote.status === "receiver_armed" && "receiver") ||
-        "peer";
-
+      const role = roleRef.current === "sender" ? "sender" : "receiver";
       let ip = "";
       let hostname = "";
-      let room = "";
-      let password = "";
+      let code = "";
       let socketBase = "";
-
       if (role === "sender") {
-        // --- New: sender uses IP/Host + Join Code only ---
         if (!senderIp || !senderJoinCode) {
           throw new Error("Please enter IP/Host and Join Code.");
         }
         const base = `http://${senderIp.trim()}:8080`;
-        // First redeem attempt (may be pending)
         const redeem = async (): Promise<InviteRedeemResponse> => {
           const res = await fetch(`${base}/invite/redeem`, {
             method: "POST",
@@ -450,46 +431,33 @@ export default function Play() {
           if (res.status === 404) return { status: "denied" };
           return (await res.json()) as InviteRedeemResponse;
         };
-
-        // Poll until approved or denied (simple, short TTL)
         let out = await redeem();
         const startedAt = Date.now();
-        while (out.status === "pending" && Date.now() - startedAt < 60_000) {
+        while (out.status === "pending" && Date.now() - startedAt < 60000) {
           await new Promise((r) => setTimeout(r, 1000));
           out = await redeem();
         }
         if (out.status !== "approved") {
           throw new Error("Invite denied or expired.");
         }
-
         ip = senderIp.trim();
         hostname = senderIp.trim();
-        room = out.room;
-        password = out.password;
-        socketBase = base; // connect to receiver's WS
+        code = senderJoinCode.trim().toUpperCase();
+        socketBase = base;
       } else {
-
-        console.log("Getting invite code...")
-        // --- Receiver path ---
-        // Start an invite; also pre-join locally so you’re ready to subscribe
         const res = await fetch(`${backendBase}/invite/start`, {
           method: "POST",
           mode: "cors",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}), // optionally {room}
+          body: JSON.stringify({}),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = (await res.json()) as InviteStartResponse;
-
         setReceiverInviteCode(data.code);
-
-        ip = data?.net?.primary_ip ?? data?.net?.all_ips?.[0] ?? "127.0.0.1";
-        hostname = data?.net?.hostname ?? "localhost";
-        password = data?.password ?? "unknown";
-        room = data?.room ?? "unknown";
+        ip = data.net.primary_ip || data.net.all_ips[0] || "127.0.0.1";
+        hostname = data.net.hostname || "localhost";
+        code = data.code;
         socketBase = backendBase;
-
-        // Kick off a poller to watch for sender request + approval UI
         (async () => {
           try {
             while (true) {
@@ -516,38 +484,25 @@ export default function Play() {
           }
         })();
       }
-
-      // Update UI summary
-      setRemote({
-        status: "connected",
-        info: { ip, hostname, password, room },
-        errorMessage: null,
-      });
-
-      // Open socket + join (unchanged)
+      setRemote({ status: "connected", info: { ip, hostname, code }, errorMessage: null });
       const sock = connectSocket(socketBase);
       socketRef.current = sock;
-
-      const joined = await joinRoom(sock, { room, password });
+      const joined = await joinRoom(sock, { room: code });
       setClientId(joined.client_id);
-
-      // Only the receiver subscribes to settings-sync and playback events (unchanged)
       if (role === "receiver") {
-        await subscribe(sock, {
-          room,
-          channels: ["settings-sync", "playback"],
-        });
-        console.log("[SUBSCRIBED] settings-sync, playback");
+        await subscribe(sock, { room: code, channels: ["settings-sync", "playback"] });
       }
     } catch (err: any) {
-      setRemote({
-        status: "error",
-        info: null,
-        errorMessage: err?.message || "Remote play connection failed.",
-      });
+      setRemote({ status: "error", info: null, errorMessage: err?.message || "Remote play connection failed." });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [backendBase, remote.status, setRemote, senderIp, senderJoinCode]);
+  }, [backendBase, senderIp, senderJoinCode]);
+
+  // Automatically start handshake when receiver is armed to simplify flow
+  useEffect(() => {
+    if (remote.status === "receiver_armed") {
+      beginRemoteHandshake();
+    }
+  }, [remote.status, beginRemoteHandshake]);
 
   const disconnectRemote = useCallback(() => {
     // Optional: sock cleanup
@@ -645,8 +600,7 @@ export default function Play() {
     };
 
     publish(sock, {
-      room: info.room,
-      password: info.password,
+      room: info.code,
       client_id: clientId,
       channel: "settings-sync",
       message: JSON.stringify(payload),
@@ -1132,11 +1086,11 @@ export default function Play() {
                   </Div>
                 )}
                 <Div display="flex" gap="0.5rem">
-                  <Button onClick={beginRemoteHandshake}>
-                    {remote.status === "sender_armed"
-                      ? "Connect as sender"
-                      : "Begin handshake"}
-                  </Button>
+                  {remote.status === "sender_armed" && (
+                    <Button onClick={beginRemoteHandshake}>
+                      Connect as sender
+                    </Button>
+                  )}
                   <Button background="#eee" onClick={turnRemoteOff}>
                     Back
                   </Button>
@@ -1171,16 +1125,13 @@ export default function Play() {
                     <strong>Client Id:</strong> {clientId}
                   </Span>
                   <Span>
-                    <strong>Room:</strong> {remote.info.room}
+                    <strong>Code:</strong> {remote.info.code}
                   </Span>
                   <Span>
                     <strong>IP:</strong> {remote.info.ip}
                   </Span>
                   <Span>
                     <strong>Hostname:</strong> {remote.info.hostname}
-                  </Span>
-                  <Span>
-                    <strong>Password:</strong> {remote.info.password}
                   </Span>
                 </Div>
                 <Div display="flex" gap="0.5rem">
