@@ -43,8 +43,7 @@ import { whiteKeyAspect } from "../data/piano-key-dimensions";
 import { css } from "@emotion/react";
 import Recorder, { type Recording } from "../audio/recorder";
 import VolumeSlider from "../components/VolumeSlider";
-import { connectSocket, joinRoom, subscribe, publish } from "../remote/socket";
-import type { InviteStartResponse, SettingsSyncPayload } from "../shared-types/remote";
+import type { SettingsSyncPayload } from "../shared-types/remote";
 import { createReceiverPeer, createSenderPeer, type PeerConn } from "../remote/peer";
 
 const default12EdoManifest = make12EDO();
@@ -83,18 +82,9 @@ type RemoteStatus =
   | "connected"
   | "error";
 
-type RemoteInfo = {
-  ip: string;
-  hostname: string;
-  /** socket.io room name for messages */
-  room: string;
-  /** password for the socket.io room */
-  password: string;
-};
-
+// Remote P2P state does not include backend info
 type RemotePlayState = {
   status: RemoteStatus;
-  info: RemoteInfo | null;
   errorMessage?: string | null;
 };
 
@@ -140,8 +130,8 @@ export default function Play() {
 
   const [volumePct, setVolumePct] = usePersistentState<number>("volume", 80);
 
-  const socketRef = useRef<ReturnType<typeof connectSocket> | null>(null);
-  const [clientId, setClientId] = useState<string | null>(null);
+  // PeerJS P2P connection reference
+  const peerRef = useRef<PeerConn | null>(null);
 
 
   const roleRef = useRef<"sender" | "receiver" | "peer">("peer");
@@ -185,10 +175,6 @@ export default function Play() {
     if (synth) synth.setEnvelope(envelope);
   }, [synth, envelope]);
 
-  const backendBase = useMemo(() => {
-    const { protocol, hostname } = window.location;
-    return `${protocol}//${hostname}:8080`;
-  }, []);
 
   // Utility: hard reset playhead & reload the element to avoid scrubber glitches
   const resetPlayhead = useCallback(() => {
@@ -202,6 +188,16 @@ export default function Play() {
     } catch (e) {
       // no-op
     }
+  }, []);
+
+  /** Generate a 6-character alphanumeric invite code for PeerJS */
+  const generateInviteCode = useCallback((): string => {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let code = "";
+    for (let i = 0; i < 6; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
   }, []);
 
   // Record controls
@@ -286,10 +282,7 @@ export default function Play() {
   const currentPlayAreaWidth = playAreaSize?.width || 0;
   const currentPlayAreaHeight = playAreaSize?.height || 0;
 
-  const [remote, setRemote] = useState<RemotePlayState>({
-    status: "off",
-    info: null,
-  });
+  const [remote, setRemote] = useState<RemotePlayState>({ status: "off" });
   // track remote key press state for visuals
   const [remotePressedIds, setRemotePressedIds] = useState<number[]>([]);
 
@@ -300,29 +293,14 @@ export default function Play() {
         synth?.resume();
         synth?.noteOn(id, pitch, envelope);
       }
-      // Remote sender: publish note-on to playback channel
-      const sock = socketRef.current;
-      if (
-        sock &&
-        remote.status === "connected" &&
-        roleRef.current === "sender" &&
-        remote.info &&
-        clientId
-      ) {
-        const msg: NoteOnMsg = {
-          type: "noteOn",
-          data: { id, freq: pitch, envelope },
-        };
-        publish(sock, {
-          room: remote.info.room,
-          password: remote.info.password,
-          client_id: clientId,
-          channel: "playback",
-          message: JSON.stringify(msg),
-        }).catch(() => {});
+      // Remote sender: send note-on via PeerJS data channel
+      const peerConn = peerRef.current;
+      if (peerConn && remote.status === "connected" && roleRef.current === "sender") {
+        const msg: NoteOnMsg = { type: "noteOn", data: { id, freq: pitch, envelope } };
+        peerConn.conn.send(msg);
       }
     },
-    [synth, envelope, remote.status, remote.info, clientId]
+    [synth, envelope, remote.status]
   );
 
   const onIdRelease = useCallback(
@@ -331,26 +309,14 @@ export default function Play() {
       if (!(remote.status === "connected" && roleRef.current === "sender")) {
         synth?.noteOff(id);
       }
-      // Remote sender: publish note-off to playback channel
-      const sock = socketRef.current;
-      if (
-        sock &&
-        remote.status === "connected" &&
-        roleRef.current === "sender" &&
-        remote.info &&
-        clientId
-      ) {
+      // Remote sender: send note-off via PeerJS data channel
+      const peerConn = peerRef.current;
+      if (peerConn && remote.status === "connected" && roleRef.current === "sender") {
         const msg: NoteOffMsg = { type: "noteOff", data: { id } };
-        publish(sock, {
-          room: remote.info.room,
-          password: remote.info.password,
-          client_id: clientId,
-          channel: "playback",
-          message: JSON.stringify(msg),
-        }).catch(() => {});
+        peerConn.conn.send(msg);
       }
     },
-    [synth, remote.status, remote.info, clientId]
+    [synth, remote.status]
   );
 
   const handleStart = useCallback(async () => {
@@ -392,141 +358,88 @@ export default function Play() {
   const openRemoteDialog = useCallback(() => setShowRemoteDialog(true), []);
   const closeRemoteDialog = useCallback(() => setShowRemoteDialog(false), []);
 
-  const peerRef = useRef<PeerConn | null>(null);
   const beginRemoteHandshake = useCallback(async () => {
     try {
       const role = roleRef.current === "sender" ? "sender" : "receiver";
-      setRemote({ status: "connecting", info: null, errorMessage: null });
-      let ip = "", hostname = "", room = "", password = "", socketBase = "";
+      setRemote({ status: "connecting", errorMessage: null });
       if (role === "receiver") {
-        // create room/password via backend
-        const res = await fetch(`${backendBase}/invite/start`, {
-          method: "POST",
-          mode: "cors",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = (await res.json()) as InviteStartResponse;
-        setReceiverInviteCode(data.code);
-        // await PeerJS sender connection
-        const peerConn = await createReceiverPeer(data.code);
+        // generate invite code and await sender connection via PeerJS
+        const code = generateInviteCode();
+        setReceiverInviteCode(code);
+        console.log("Creating the peer with code: "+code)
+        const peerConn = await createReceiverPeer(code);
+        console.log("Done.")
         peerRef.current = peerConn;
-        // send room info to sender
-        peerConn.conn.send({ room: data.room, password: data.password, net: data.net });
-        ip = data.net.primary_ip || data.net.all_ips[0] || "127.0.0.1";
-        hostname = data.net.hostname || "localhost";
-        room = data.room;
-        password = data.password;
-        socketBase = backendBase;
       } else {
-        if (!senderJoinCode) throw new Error("Please enter Join Code.");
-        // connect to receiver via PeerJS
+        if (!senderJoinCode) throw new Error("Please enter Invite Code.");
         const peerConn = await createSenderPeer(senderJoinCode);
         peerRef.current = peerConn;
-        // receive room info from receiver
-        const payload = await new Promise<any>((resolve, reject) => {
-          peerConn.conn.on("error", reject);
-          peerConn.conn.on("data", resolve);
-        });
-        ip = payload.net.primary_ip || payload.net.all_ips[0] || "127.0.0.1";
-        hostname = payload.net.hostname || "localhost";
-        room = payload.room;
-        password = payload.password;
-        socketBase = `http://${ip}:8080`;
       }
-      // proceed with Socket.IO connection
-      const sock = connectSocket(socketBase);
-      socketRef.current = sock;
-      const joined = await joinRoom(sock, { room, password });
-      setClientId(joined.client_id);
-      if (role === "receiver") {
-        await subscribe(sock, { room, channels: ["settings-sync", "playback"] });
-      }
-      setRemote({ status: "connected", info: { ip, hostname, room, password }, errorMessage: null });
+      setRemote({ status: "connected", errorMessage: null });
     } catch (err: any) {
-      setRemote({ status: "error", info: null, errorMessage: err?.message || "Remote play connection failed." });
+      setRemote({ status: "error", errorMessage: err?.message || "Remote play connection failed." });
     }
-  }, [backendBase, senderJoinCode]);
+  }, [generateInviteCode, senderJoinCode]);
 
   const turnRemoteOff = useCallback(() => {
-    setRemote({ status: "off", info: null });
+    setRemote({ status: "off" });
   }, [setRemote]);
   const armAsReceiver = useCallback(() => {
     roleRef.current = "receiver";
     setReceiverInviteCode(null);
-    setRemote({ status: "receiver_armed", info: null });
+    setRemote({ status: "receiver_armed" });
     beginRemoteHandshake();
   }, [setRemote, beginRemoteHandshake]);
 
   const armAsSender = useCallback(() => {
     roleRef.current = "sender";
-    setRemote({ status: "sender_armed", info: null });
+    setRemote({ status: "sender_armed" });
   }, [setRemote]);
 
   const disconnectRemote = useCallback(() => {
-    // Optional: sock cleanup
-    const s = socketRef.current;
-    if (s) {
+    // Clean up PeerJS connection
+    const peerConn = peerRef.current;
+    if (peerConn) {
       try {
-        s.disconnect?.();
+        peerConn.peer.destroy();
       } catch {}
-      socketRef.current = null;
+      peerRef.current = null;
     }
-    setRemote({ status: "off", info: null });
+    setRemote({ status: "off" });
   }, [setRemote]);
 
-  // Receiver-only listener attachment
+  // Receiver-only listener attachment via PeerJS data channel
   useEffect(() => {
-    const sock = socketRef.current;
-    if (!sock) return;
-    if (remote.status !== "connected") return;
-    if (roleRef.current !== "receiver") return;
+    const peerConn = peerRef.current;
+    if (!peerConn || remote.status !== "connected" || roleRef.current !== "receiver") return;
 
-    console.log("Attaching socket listeners (receiver)…");
-
-    const onMessage = (evt: any) => {
+    const onData = (msg: any) => {
       try {
-        // Backend wraps deliveries as { type:"message", channel, text, ... }
-        if (evt?.type !== "message") return;
-        // Handle settings sync
-        if (evt.channel === "settings-sync") {
-          const parsed = JSON.parse(String(evt.text || "{}"));
-          if (parsed?.kind !== "settings-sync") return;
-          // Apply: make the receiver mirror the sender settings
-          setManifestName(parsed.manifestName);
+        if ((msg as SettingsSyncPayload)?.kind === "settings-sync") {
+          const parsed = msg as SettingsSyncPayload;
+          setManifestName(parsed.manifestName as keyof typeof manifestPresets);
           setWaveform(parsed.waveform);
           setEnvelope(parsed.envelope);
           setVolumePct(parsed.volumePct);
           setStartingOctave(parsed.startingOctave);
           setOctaveCount(parsed.octaveCount);
-          return;
-        }
-        // Handle playback events
-        if (evt.channel === "playback") {
-          const msg = JSON.parse(String(evt.text || "{}"));
-          if (msg.type === "noteOn") {
-            // reflect remote press in visuals
-            setRemotePressedIds((prev) =>
-              prev.includes(msg.data.id) ? prev : [...prev, msg.data.id]
-            );
-            onIdPress(msg.data.id, msg.data.freq);
-          } else if (msg.type === "noteOff") {
-            setRemotePressedIds((prev) =>
-              prev.filter((i) => i !== msg.data.id)
-            );
-            onIdRelease(msg.data.id);
-          }
-          return;
+        } else if ((msg as NoteOnMsg).type === "noteOn") {
+          const m = msg as NoteOnMsg;
+          setRemotePressedIds((prev) => (prev.includes(m.data.id) ? prev : [...prev, m.data.id]));
+          onIdPress(m.data.id, m.data.freq);
+        } else if ((msg as NoteOffMsg).type === "noteOff") {
+          const m = msg as NoteOffMsg;
+          setRemotePressedIds((prev) => prev.filter((i) => i !== m.data.id));
+          onIdRelease(m.data.id);
         }
       } catch {
         /* ignore bad payloads */
       }
     };
 
-    sock.on("message", onMessage);
+    peerConn.conn.on("data", onData);
     return () => {
-      sock.off("message", onMessage);
+      peerConn.conn.off("data", onData);
     };
   }, [
     remote.status,
@@ -540,15 +453,10 @@ export default function Play() {
     onIdRelease,
   ]);
 
-  // Sender-only publish
+  // Sender-only settings sync via PeerJS
   useEffect(() => {
-    const sock = socketRef.current;
-    const info = remote.info;
-    const iAmSender = roleRef.current === "sender";
-
-    if (!sock || !info || remote.status !== "connected" || !iAmSender) return;
-    if (!clientId) return; // wait for clientId to be set
-
+    const peerConn = peerRef.current;
+    if (!peerConn || remote.status !== "connected" || roleRef.current !== "sender") return;
     const payload: SettingsSyncPayload = {
       kind: "settings-sync",
       manifestName,
@@ -558,26 +466,15 @@ export default function Play() {
       startingOctave,
       octaveCount,
     };
-
-    publish(sock, {
-      room: info.room,
-      password: info.password,
-      client_id: clientId,
-      channel: "settings-sync",
-      message: JSON.stringify(payload),
-    }).catch(() => {
-      /* swallow publish errors for now */
-    });
+    peerConn.conn.send(payload);
   }, [
     remote.status,
-    remote.info, // when we first connect
     manifestName,
     waveform,
     envelope,
     volumePct,
     startingOctave,
-    octaveCount, // whenever any setting changes
-    clientId,
+    octaveCount,
   ]);
 
   return (
@@ -992,26 +889,13 @@ export default function Play() {
               </>
             )}
 
-            {remote.status === "connected" && remote.info && (
+            {remote.status === "connected" && (
               <>
                 <Span style={{ fontWeight: 600 }}>Connected</Span>
-                <Div
-                  background="#f6f6f6"
-                  padding="0.75rem"
-                  borderRadius="0.375rem"
-                  display="flex"
-                  flexDirection="column"
-                  gap="0.25rem"
-                >
-                  <Span>
-                    <strong>Client Id:</strong> {clientId}
-                  </Span>
-                  <Span>
-                    <strong>IP:</strong> {remote.info.ip}
-                  </Span>
-                  <Span>
-                    <strong>Hostname:</strong> {remote.info.hostname}
-                  </Span>
+                <Div display="flex" flexDirection="column" gap="0.25rem">
+                  {roleRef.current === "receiver" && (
+                    <Span><strong>Invite Code:</strong> {receiverInviteCode}</Span>
+                  )}
                 </Div>
                 <Div display="flex" gap="0.5rem">
                   <Button onClick={disconnectRemote}>Disconnect</Button>
