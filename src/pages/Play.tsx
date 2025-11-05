@@ -365,9 +365,7 @@ export default function Play() {
         // generate invite code and await sender connection via PeerJS
         const code = generateInviteCode();
         setReceiverInviteCode(code);
-        console.log("Creating the peer with code: "+code)
         const peerConn = await createReceiverPeer(code);
-        console.log("Done.")
         peerRef.current = peerConn;
       } else {
         if (!senderJoinCode) throw new Error("Please enter Invite Code.");
@@ -878,10 +876,14 @@ export default function Play() {
 
             {remote.status === "connecting" && (
               <>
-                <Span>Connecting to remote play…</Span>
                 <Span style={{ fontSize: "0.9rem", opacity: 0.7 }}>
-                  Awaiting PeerJS connection…
+                  Awaiting connection from any peers…
                 </Span>
+                <Div display="flex" flexDirection="column" gap="0.25rem">
+                  {roleRef.current === "receiver" && (
+                    <Span><strong>Invite Code:</strong> {receiverInviteCode}</Span>
+                  )}
+                </Div>
                 <Button background="#eee" onClick={turnRemoteOff}>
                   Cancel
                 </Button>
@@ -891,11 +893,7 @@ export default function Play() {
             {remote.status === "connected" && (
               <>
                 <Span style={{ fontWeight: 600 }}>Connected</Span>
-                <Div display="flex" flexDirection="column" gap="0.25rem">
-                  {roleRef.current === "receiver" && (
-                    <Span><strong>Invite Code:</strong> {receiverInviteCode}</Span>
-                  )}
-                </Div>
+
                 <Div display="flex" gap="0.5rem">
                   <Button onClick={disconnectRemote}>Disconnect</Button>
                   <Button onClick={closeRemoteDialog}>Close</Button>

@@ -25,6 +25,11 @@ console.log("🔗 Vite alias map:", alias);
 // --- Vite config ---
 export default defineConfig({
   resolve: { alias },
+  server: {
+    allowedHosts: [
+      "wirestheyeen.ngrok.app"
+    ]
+  },
   plugins: [
     react({
       babel: { plugins: [["babel-plugin-react-compiler"]] },
