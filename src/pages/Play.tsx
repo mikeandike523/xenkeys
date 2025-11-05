@@ -24,7 +24,12 @@ import { usePersistentState } from "../hooks/fwk/usePersistentState";
 
 import CanvasKeyboard from "../components/CanvasKeyboard";
 import { NumberStepper } from "../components/NumberStepper";
-import type { Waveform, Envelope, NoteOnMsg, NoteOffMsg } from "../shared-types/audio-engine";
+import type {
+  Waveform,
+  Envelope,
+  NoteOnMsg,
+  NoteOffMsg,
+} from "../shared-types/audio-engine";
 import Synth from "../audio/synth";
 import { make12EDO } from "../data/edo-presets/12edo";
 import { make22EDO } from "../data/edo-presets/22edo";
@@ -39,7 +44,7 @@ import { css } from "@emotion/react";
 import Recorder, { type Recording } from "../audio/recorder";
 import VolumeSlider from "../components/VolumeSlider";
 import { connectSocket, joinRoom, subscribe, publish } from "../remote/socket";
-import type { SettingsSyncPayload } from "../shared-types/remote";
+import type { InviteRedeemResponse, InviteStartResponse, InviteStatus, SettingsSyncPayload } from "../shared-types/remote";
 
 const default12EdoManifest = make12EDO();
 const default19EdoManifest = make19EDO();
@@ -140,6 +145,19 @@ export default function Play() {
   const [senderPassword, setSenderPassword] = useState("");
 
   const roleRef = useRef<"sender" | "receiver" | "peer">("peer");
+
+  // New UI state for join-code flow
+  const [senderJoinCode, setSenderJoinCode] = useState("");
+  const [receiverInviteCode, setReceiverInviteCode] = useState<string | null>(
+    null
+  );
+  const [receiverInviteStatus, setReceiverInviteStatus] = useState<
+    "idle" | "pending" | "approved" | "denied"
+  >("idle");
+  const [receiverRequestedBy, setReceiverRequestedBy] = useState<{
+    ip?: string;
+    label?: string;
+  } | null>(null);
 
   useEffect(() => {
     if (synth) synth.setVolume(volumePct / 100);
@@ -286,11 +304,11 @@ export default function Play() {
 
   const onIdPress = useCallback(
     (id: number, pitch: number) => {
-    // local playback unless acting as remote sender
-    if (!(remote.status === "connected" && roleRef.current === "sender")) {
-      synth?.resume();
-      synth?.noteOn(id, pitch, envelope);
-    }
+      // local playback unless acting as remote sender
+      if (!(remote.status === "connected" && roleRef.current === "sender")) {
+        synth?.resume();
+        synth?.noteOn(id, pitch, envelope);
+      }
       // Remote sender: publish note-on to playback channel
       const sock = socketRef.current;
       if (
@@ -300,7 +318,10 @@ export default function Play() {
         remote.info &&
         clientId
       ) {
-        const msg: NoteOnMsg = { type: "noteOn", data: { id, freq: pitch, envelope } };
+        const msg: NoteOnMsg = {
+          type: "noteOn",
+          data: { id, freq: pitch, envelope },
+        };
         publish(sock, {
           room: remote.info.room,
           password: remote.info.password,
@@ -377,7 +398,6 @@ export default function Play() {
   // ---------------- Remote Play UI State + Stubs ----------------
   const [showRemoteDialog, setShowRemoteDialog] = useState(false);
 
-
   const openRemoteDialog = useCallback(() => setShowRemoteDialog(true), []);
   const closeRemoteDialog = useCallback(() => setShowRemoteDialog(false), []);
 
@@ -402,7 +422,6 @@ export default function Play() {
     }));
 
     try {
-      // figure out the role once up front
       const role =
         roleRef.current ||
         (remote.status === "sender_armed" && "sender") ||
@@ -416,53 +435,110 @@ export default function Play() {
       let socketBase = "";
 
       if (role === "sender") {
-        // --- sender uses the manually-entered info ---
-        if (!senderIp || !senderRoom || !senderPassword) {
-          throw new Error("Please enter IP, room, and password.");
+        // --- New: sender uses IP/Host + Join Code only ---
+        if (!senderIp || !senderJoinCode) {
+          throw new Error("Please enter IP/Host and Join Code.");
         }
+        const base = `http://${senderIp.trim()}:8080`;
+        // First redeem attempt (may be pending)
+        const redeem = async (): Promise<InviteRedeemResponse> => {
+          const res = await fetch(`${base}/invite/redeem`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ code: senderJoinCode.trim().toUpperCase() }),
+          });
+          if (res.status === 404) return { status: "denied" };
+          return (await res.json()) as InviteRedeemResponse;
+        };
+
+        // Poll until approved or denied (simple, short TTL)
+        let out = await redeem();
+        const startedAt = Date.now();
+        while (out.status === "pending" && Date.now() - startedAt < 60_000) {
+          await new Promise((r) => setTimeout(r, 1000));
+          out = await redeem();
+        }
+        if (out.status !== "approved") {
+          throw new Error("Invite denied or expired.");
+        }
+
         ip = senderIp.trim();
         hostname = senderIp.trim();
-        room = senderRoom.trim();
-        password = senderPassword.trim();
-        socketBase = `http://${ip}:8080`;
+        room = out.room;
+        password = out.password;
+        socketBase = base; // connect to receiver's WS
       } else {
-        // --- receiver: ask backend for details ---
-        const res = await fetch(`${backendBase}/connection`, {
+
+        console.log("Getting invite code...")
+        // --- Receiver path ---
+        // Start an invite; also pre-join locally so you’re ready to subscribe
+        const res = await fetch(`${backendBase}/invite/start`, {
           method: "POST",
+          mode: "cors",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ role }),
+          body: JSON.stringify({}), // optionally {room}
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+        const data = (await res.json()) as InviteStartResponse;
+
+        setReceiverInviteCode(data.code);
 
         ip = data?.net?.primary_ip ?? data?.net?.all_ips?.[0] ?? "127.0.0.1";
         hostname = data?.net?.hostname ?? "localhost";
         password = data?.password ?? "unknown";
         room = data?.room ?? "unknown";
         socketBase = backendBase;
+
+        // Kick off a poller to watch for sender request + approval UI
+        (async () => {
+          try {
+            while (true) {
+              const st = await fetch(
+                `${backendBase}/invite/status?code=${data.code}`
+              );
+              const js = (await st.json()) as InviteStatus;
+              if (js.status === "pending") {
+                setReceiverInviteStatus("pending");
+                setReceiverRequestedBy(js.requested_by || null);
+              } else if (js.status === "approved") {
+                setReceiverInviteStatus("approved");
+                break;
+              } else if (js.status === "denied") {
+                setReceiverInviteStatus("denied");
+                break;
+              } else {
+                setReceiverInviteStatus("idle");
+              }
+              await new Promise((r) => setTimeout(r, 1000));
+            }
+          } catch {
+            /* swallow polling errors */
+          }
+        })();
       }
 
-      // update UI summary
+      // Update UI summary
       setRemote({
         status: "connected",
         info: { ip, hostname, password, room },
         errorMessage: null,
       });
 
-      // open socket + join
+      // Open socket + join (unchanged)
       const sock = connectSocket(socketBase);
       socketRef.current = sock;
 
       const joined = await joinRoom(sock, { room, password });
       setClientId(joined.client_id);
 
-      // Only the receiver subscribes to settings-sync and playback events
+      // Only the receiver subscribes to settings-sync and playback events (unchanged)
       if (role === "receiver") {
-        await subscribe(sock, { room, channels: ["settings-sync", "playback"] });
+        await subscribe(sock, {
+          room,
+          channels: ["settings-sync", "playback"],
+        });
         console.log("[SUBSCRIBED] settings-sync, playback");
       }
-
-      // initial push will now be handled by the useEffect below
     } catch (err: any) {
       setRemote({
         status: "error",
@@ -471,14 +547,7 @@ export default function Play() {
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    backendBase,
-    remote.status,
-    setRemote,
-    senderIp,
-    senderRoom,
-    senderPassword,
-  ]);
+  }, [backendBase, remote.status, setRemote, senderIp, senderJoinCode]);
 
   const disconnectRemote = useCallback(() => {
     // Optional: sock cleanup
@@ -528,7 +597,9 @@ export default function Play() {
             );
             onIdPress(msg.data.id, msg.data.freq);
           } else if (msg.type === "noteOff") {
-            setRemotePressedIds((prev) => prev.filter((i) => i !== msg.data.id));
+            setRemotePressedIds((prev) =>
+              prev.filter((i) => i !== msg.data.id)
+            );
             onIdRelease(msg.data.id);
           }
           return;
@@ -953,6 +1024,85 @@ export default function Play() {
                     : "Receiver selected."}
                 </Span>
 
+                {remote.status === "receiver_armed" && (
+                  <Div display="flex" flexDirection="column" gap="0.5rem">
+                    {receiverInviteCode ? (
+                      <>
+                        <Span>
+                          <strong>Share this code:</strong> {receiverInviteCode}
+                        </Span>
+                        {receiverInviteStatus === "idle" && (
+                          <Span>Waiting for a sender…</Span>
+                        )}
+                        {receiverInviteStatus === "pending" && (
+                          <>
+                            <Span>
+                              Incoming request{" "}
+                              {receiverRequestedBy?.ip
+                                ? `from ${receiverRequestedBy.ip}`
+                                : ""}
+                              .
+                            </Span>
+                            <Div display="flex" gap="0.5rem">
+                              <Button
+                                onClick={async () => {
+                                  await fetch(
+                                    `${backendBase}/invite/decision`,
+                                    {
+                                      method: "POST",
+                                      headers: {
+                                        "Content-Type": "application/json",
+                                      },
+                                      body: JSON.stringify({
+                                        code: receiverInviteCode,
+                                        accept: true,
+                                      }),
+                                    }
+                                  );
+                                  // status poller will flip to approved
+                                }}
+                              >
+                                Approve
+                              </Button>
+                              <Button
+                                background="#eee"
+                                onClick={async () => {
+                                  await fetch(
+                                    `${backendBase}/invite/decision`,
+                                    {
+                                      method: "POST",
+                                      headers: {
+                                        "Content-Type": "application/json",
+                                      },
+                                      body: JSON.stringify({
+                                        code: receiverInviteCode,
+                                        accept: false,
+                                      }),
+                                    }
+                                  );
+                                  // status poller will flip to denied
+                                }}
+                              >
+                                Deny
+                              </Button>
+                            </Div>
+                          </>
+                        )}
+                        {receiverInviteStatus === "approved" && (
+                          <Span>Approved — waiting for sender to connect…</Span>
+                        )}
+                        {receiverInviteStatus === "denied" && (
+                          <Span>
+                            Request denied. You can close or start a new invite.
+                          </Span>
+                        )}
+                      </>
+                    ) : (
+                      <Span>Preparing invite…</Span>
+                    )}
+                  </Div>
+                )}
+
                 {remote.status === "sender_armed" && (
                   <Div display="flex" flexDirection="column" gap="0.5rem">
                     <label>
@@ -967,30 +1117,20 @@ export default function Play() {
                       />
                     </label>
                     <label>
-                      Room:
+                      Join Code:
                       <input
                         autoCapitalize="off"
                         autoComplete="off"
                         autoCorrect="off"
-                        value={senderRoom}
-                        onChange={(e) => setSenderRoom(e.target.value)}
-                        placeholder="room id"
-                      />
-                    </label>
-                    <label>
-                      Password:
-                      <input
-                        autoCapitalize="off"
-                        autoComplete="off"
-                        autoCorrect="off"
-                        value={senderPassword}
-                        onChange={(e) => setSenderPassword(e.target.value)}
-                        placeholder="password"
+                        value={senderJoinCode}
+                        onChange={(e) =>
+                          setSenderJoinCode(e.target.value.toUpperCase())
+                        }
+                        placeholder="6 letters/digits"
                       />
                     </label>
                   </Div>
                 )}
-
                 <Div display="flex" gap="0.5rem">
                   <Button onClick={beginRemoteHandshake}>
                     {remote.status === "sender_armed"

@@ -2,14 +2,17 @@
   position: fixed;
   top: 0;
   left: 0;
-  right: 0;
+  width: 100dvw;
+  height: 100dvh;
   bottom: 0;
   background-color: rgba(0, 0, 0, 0.5);
   display: flex;
-  justify-content: center;
-  align-items: center;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: flex-start;
   z-index: 1000;
   cursor: pointer;
+  overflow-y:auto;
 }
 
 .audio-modal span {

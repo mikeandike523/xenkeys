@@ -8,6 +8,9 @@ from typing import Dict, Set
 from flask import Flask, request
 from flask_socketio import SocketIO, join_room, leave_room, emit
 from flask import jsonify
+import random
+import string
+from datetime import datetime, timedelta
 
 # -----------------------------
 # Config: single source of truth
@@ -17,6 +20,21 @@ PORT = int(os.getenv("PORT", "8080"))  # HTTP & WS share this port
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "dev-on-trusted-lan"
 socketio = SocketIO(app, cors_allowed_origins="*")  # WS with CORS for LAN
+
+INVITES: Dict[str, Dict] = {}  # code -> {room,password,created,approved,denied,requested_by}
+INVITE_TTL = timedelta(minutes=10)
+
+
+def _rand_invite_code() -> str:
+    # 6 chars A-Z + 0-9, easy to read (omit ambiguous if desired)
+    alphabet = string.ascii_uppercase + string.digits
+    return "".join(random.choice(alphabet) for _ in range(6))
+
+def _expire_invites_now():
+    now = datetime.utcnow()
+    for code, rec in list(INVITES.items()):
+        if now - rec["created"] > INVITE_TTL:
+            INVITES.pop(code, None)
 
 # -----------------------------
 # Manual CORS (fallback when built-in helpers misbehave)
@@ -202,6 +220,146 @@ def connection():
         },
     }
     return jsonify(payload), 200
+
+# === Join-code endpoints ===
+
+@app.post("/invite/start")
+def invite_start():
+    """
+    Receiver creates an ephemeral invite code and a private room/password.
+    Returns: { code, room, password, net }
+    """
+
+    print("/invite/start called")
+
+    data = (request.get_json(silent=True) or {})
+    # Optionally accept requested room; otherwise random like /connection
+    requested_room = (data.get("room") or "").strip()
+
+    # create/find room (mirrors /connection)
+    if requested_room:
+        room_name = requested_room
+        room = ROOMS.get(room_name)
+        if not room:
+            room = RoomState(room_name, _rand_password())
+            ROOMS[room_name] = room
+    else:
+        room_name = _rand_room()
+        room = RoomState(room_name, _rand_password())
+        ROOMS[room_name] = room
+
+    # generate/record invite
+    _expire_invites_now()
+    code = _rand_invite_code()
+    INVITES[code] = {
+        "room": room_name,
+        "password": room.password,
+        "created": datetime.utcnow(),
+        "approved": False,
+        "denied": False,
+        "requested_by": None,   # filled by redeem
+    }
+
+    net = network_info()
+    return jsonify({
+        "status": "ok",
+        "code": code,
+        "room": room_name,
+        "password": room.password,
+        "net": {
+            "hostname": net["hostname"],
+            "fqdn": net["fqdn"],
+            "primary_ip": net["primary_ip"],
+            "all_ips": net["all_ips"],
+            "port": net["configured_port"],
+            "http_base": net["http_base"],
+        },
+    }), 200
+
+
+@app.post("/invite/redeem")
+def invite_redeem():
+    """
+    Sender calls this on the receiver's host to ask for access by code.
+    Body: { code, sender_label? }
+    Returns when approved:
+      { status:"approved", room, password }
+    While waiting:
+      { status:"pending" }
+    If denied/expired/invalid:
+      { status:"denied" } or 404
+    """
+    _expire_invites_now()
+    data = (request.get_json(silent=True) or {})
+    code = (data.get("code") or "").strip().upper()
+    sender_label = (data.get("sender_label") or "").strip()
+
+    rec = INVITES.get(code)
+    if not rec:
+        return jsonify({"error": "invalid_or_expired"}), 404
+
+    # record who asked (best-effort)
+    if rec["requested_by"] is None:
+        rec["requested_by"] = {
+            "ip": request.remote_addr,
+            "label": sender_label or "",
+            "ts": time.time(),
+        }
+
+    if rec["denied"]:
+        return jsonify({"status": "denied"}), 200
+    if not rec["approved"]:
+        return jsonify({"status": "pending"}), 200
+
+    # approved → deliver secrets and burn the invite (single-use)
+    payload = {"status": "approved", "room": rec["room"], "password": rec["password"]}
+    INVITES.pop(code, None)
+    return jsonify(payload), 200
+
+
+@app.get("/invite/status")
+def invite_status():
+    """
+    Receiver/Sender can poll status for a code (receiver to show pending, sender to wait).
+    Query: ?code=ABC123
+    Returns: { status: "idle"|"pending"|"approved"|"denied", requested_by?: {...} }
+    """
+    _expire_invites_now()
+    code = ((request.args.get("code") or "").strip().upper())
+    rec = INVITES.get(code)
+    if not rec:
+        return jsonify({"status": "denied"}), 200  # treat missing as denied/expired
+
+    if rec["denied"]:
+        return jsonify({"status": "denied"}), 200
+    if rec["approved"]:
+        return jsonify({"status": "approved"}), 200
+    if rec["requested_by"] is None:
+        return jsonify({"status": "idle"}), 200
+    return jsonify({"status": "pending", "requested_by": rec["requested_by"]}), 200
+
+
+@app.post("/invite/decision")
+def invite_decision():
+    """
+    Receiver approves or denies a pending request.
+    Body: { code, accept: boolean }
+    """
+    _expire_invites_now()
+    data = (request.get_json(silent=True) or {})
+    code = (data.get("code") or "").strip().upper()
+    accept = bool(data.get("accept"))
+
+    rec = INVITES.get(code)
+    if not rec:
+        return jsonify({"error": "invalid_or_expired"}), 404
+
+    if accept:
+        rec["approved"] = True
+        return jsonify({"status": "approved"}), 200
+    else:
+        rec["denied"] = True
+        return jsonify({"status": "denied"}), 200
 
 
 # -------------

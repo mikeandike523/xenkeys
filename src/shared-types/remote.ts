@@ -11,3 +11,31 @@ export type SettingsSyncPayload = {
   startingOctave: number;        // oct start
   octaveCount: number;           // oct count
 };
+
+
+// --- New: ephemeral join-code types ---
+export type InviteStartResponse = {
+  status: "ok";
+  code: string;                 // 6-char
+  room: string;
+  password: string;
+  net: {
+    hostname: string;
+    fqdn: string;
+    primary_ip: string;
+    all_ips: string[];
+    port: number;
+    http_base: string | null;
+  };
+};
+
+export type InviteStatus =
+  | { status: "idle" }
+  | { status: "pending"; requested_by: { ip?: string; label?: string; ts?: number } }
+  | { status: "approved" }
+  | { status: "denied" };
+
+export type InviteRedeemResponse =
+  | { status: "pending" }
+  | { status: "approved"; room: string; password: string }
+  | { status: "denied" };
