@@ -2,7 +2,6 @@
 # pip install flask flask-socketio eventlet
 import os
 import uuid
-import time
 import socket
 from typing import Dict, Set
 from flask import Flask, request
@@ -277,89 +276,6 @@ def invite_start():
     }), 200
 
 
-@app.post("/invite/redeem")
-def invite_redeem():
-    """
-    Sender calls this on the receiver's host to ask for access by code.
-    Body: { code, sender_label? }
-    Returns when approved:
-      { status:"approved", room, password }
-    While waiting:
-      { status:"pending" }
-    If denied/expired/invalid:
-      { status:"denied" } or 404
-    """
-    _expire_invites_now()
-    data = (request.get_json(silent=True) or {})
-    code = (data.get("code") or "").strip().upper()
-    sender_label = (data.get("sender_label") or "").strip()
-
-    rec = INVITES.get(code)
-    if not rec:
-        return jsonify({"error": "invalid_or_expired"}), 404
-
-    # record who asked (best-effort)
-    if rec["requested_by"] is None:
-        rec["requested_by"] = {
-            "ip": request.remote_addr,
-            "label": sender_label or "",
-            "ts": time.time(),
-        }
-
-    if rec["denied"]:
-        return jsonify({"status": "denied"}), 200
-    if not rec["approved"]:
-        return jsonify({"status": "pending"}), 200
-
-    # approved → deliver secrets and burn the invite (single-use)
-    payload = {"status": "approved", "room": rec["room"], "password": rec["password"]}
-    INVITES.pop(code, None)
-    return jsonify(payload), 200
-
-
-@app.get("/invite/status")
-def invite_status():
-    """
-    Receiver/Sender can poll status for a code (receiver to show pending, sender to wait).
-    Query: ?code=ABC123
-    Returns: { status: "idle"|"pending"|"approved"|"denied", requested_by?: {...} }
-    """
-    _expire_invites_now()
-    code = ((request.args.get("code") or "").strip().upper())
-    rec = INVITES.get(code)
-    if not rec:
-        return jsonify({"status": "denied"}), 200  # treat missing as denied/expired
-
-    if rec["denied"]:
-        return jsonify({"status": "denied"}), 200
-    if rec["approved"]:
-        return jsonify({"status": "approved"}), 200
-    if rec["requested_by"] is None:
-        return jsonify({"status": "idle"}), 200
-    return jsonify({"status": "pending", "requested_by": rec["requested_by"]}), 200
-
-
-@app.post("/invite/decision")
-def invite_decision():
-    """
-    Receiver approves or denies a pending request.
-    Body: { code, accept: boolean }
-    """
-    _expire_invites_now()
-    data = (request.get_json(silent=True) or {})
-    code = (data.get("code") or "").strip().upper()
-    accept = bool(data.get("accept"))
-
-    rec = INVITES.get(code)
-    if not rec:
-        return jsonify({"error": "invalid_or_expired"}), 404
-
-    if accept:
-        rec["approved"] = True
-        return jsonify({"status": "approved"}), 200
-    else:
-        rec["denied"] = True
-        return jsonify({"status": "denied"}), 200
 
 
 # -------------

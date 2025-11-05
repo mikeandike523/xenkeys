@@ -1,6 +1,6 @@
 // src/remote/peer.ts
 // PeerJS wrapper to establish P2P data connections using 6-char invite codes.
-import Peer, { DataConnection } from 'peerjs';
+import Peer, { type DataConnection } from 'peerjs';
 
 /**
  * Namespace prefix for PeerJS IDs to avoid collisions.

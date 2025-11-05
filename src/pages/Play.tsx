@@ -44,12 +44,8 @@ import { css } from "@emotion/react";
 import Recorder, { type Recording } from "../audio/recorder";
 import VolumeSlider from "../components/VolumeSlider";
 import { connectSocket, joinRoom, subscribe, publish } from "../remote/socket";
-import type {
-  InviteRedeemResponse,
-  InviteStartResponse,
-  InviteStatus,
-  SettingsSyncPayload,
-} from "../shared-types/remote";
+import type { InviteStartResponse, SettingsSyncPayload } from "../shared-types/remote";
+import { createReceiverPeer, createSenderPeer, type PeerConn } from "../remote/peer";
 
 const default12EdoManifest = make12EDO();
 const default19EdoManifest = make19EDO();
@@ -147,22 +143,12 @@ export default function Play() {
   const socketRef = useRef<ReturnType<typeof connectSocket> | null>(null);
   const [clientId, setClientId] = useState<string | null>(null);
 
-  const [senderIp, setSenderIp] = useState("");
 
   const roleRef = useRef<"sender" | "receiver" | "peer">("peer");
 
-  // New UI state for join-code flow
+  // UI state for join-code flow
   const [senderJoinCode, setSenderJoinCode] = useState("");
-  const [receiverInviteCode, setReceiverInviteCode] = useState<string | null>(
-    null
-  );
-  const [receiverInviteStatus, setReceiverInviteStatus] = useState<
-    "idle" | "pending" | "approved" | "denied"
-  >("idle");
-  const [receiverRequestedBy, setReceiverRequestedBy] = useState<{
-    ip?: string;
-    label?: string;
-  } | null>(null);
+  const [receiverInviteCode, setReceiverInviteCode] = useState<string | null>(null);
 
   useEffect(() => {
     if (synth) synth.setVolume(volumePct / 100);
@@ -406,46 +392,14 @@ export default function Play() {
   const openRemoteDialog = useCallback(() => setShowRemoteDialog(true), []);
   const closeRemoteDialog = useCallback(() => setShowRemoteDialog(false), []);
 
+  const peerRef = useRef<PeerConn | null>(null);
   const beginRemoteHandshake = useCallback(async () => {
     try {
       const role = roleRef.current === "sender" ? "sender" : "receiver";
-      let ip = "",
-        hostname = "",
-        room = "",
-        password = "",
-        socketBase = "";
-      if (role === "sender") {
-        setRemote({ status: "connecting", info: null, errorMessage: null });
-        if (!senderIp || !senderJoinCode) {
-          throw new Error("Please enter IP/Host and Join Code.");
-        }
-        const base = `http://${senderIp.trim()}:8080`;
-        const redeem = async (): Promise<InviteRedeemResponse> => {
-          const res = await fetch(`${base}/invite/redeem`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ code: senderJoinCode.trim().toUpperCase() }),
-          });
-          if (res.status === 404) return { status: "denied" };
-          return (await res.json()) as InviteRedeemResponse;
-        };
-        let out = await redeem();
-        const startedAt = Date.now();
-        while (out.status === "pending" && Date.now() - startedAt < 60000) {
-          await new Promise((r) => setTimeout(r, 1000));
-          out = await redeem();
-        }
-        if (out.status !== "approved") {
-          throw new Error("Invite denied or expired.");
-        }
-        ip = senderIp.trim();
-        hostname = senderIp.trim();
-        room = out.room;
-        password = out.password;
-        socketBase = base;
-      } else {
-        setReceiverInviteStatus("idle");
-        setReceiverInviteCode(null);
+      setRemote({ status: "connecting", info: null, errorMessage: null });
+      let ip = "", hostname = "", room = "", password = "", socketBase = "";
+      if (role === "receiver") {
+        // create room/password via backend
         const res = await fetch(`${backendBase}/invite/start`, {
           method: "POST",
           mode: "cors",
@@ -455,88 +409,55 @@ export default function Play() {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = (await res.json()) as InviteStartResponse;
         setReceiverInviteCode(data.code);
+        // await PeerJS sender connection
+        const peerConn = await createReceiverPeer(data.code);
+        peerRef.current = peerConn;
+        // send room info to sender
+        peerConn.conn.send({ room: data.room, password: data.password, net: data.net });
         ip = data.net.primary_ip || data.net.all_ips[0] || "127.0.0.1";
         hostname = data.net.hostname || "localhost";
         room = data.room;
         password = data.password;
         socketBase = backendBase;
-        // poll invite status and wait for approval or denial
-        let finalStatus: InviteStatus['status'] = 'idle';
-        try {
-          while (true) {
-            const st = await fetch(
-              `${backendBase}/invite/status?code=${data.code}`
-            );
-            const js = (await st.json()) as InviteStatus;
-            if (js.status === 'pending') {
-              setReceiverInviteStatus('pending');
-              setReceiverRequestedBy(js.requested_by || null);
-            } else if (js.status === 'approved') {
-              setReceiverInviteStatus('approved');
-              finalStatus = 'approved';
-              break;
-            } else if (js.status === 'denied') {
-              setReceiverInviteStatus('denied');
-              finalStatus = 'denied';
-              break;
-            } else {
-              setReceiverInviteStatus('idle');
-            }
-            await new Promise((r) => setTimeout(r, 1000));
-          }
-        } catch {
-          /* swallow polling errors */
-        }
-        if (finalStatus !== 'approved') {
-          throw new Error('Invite denied or expired.');
-        }
+      } else {
+        if (!senderJoinCode) throw new Error("Please enter Join Code.");
+        // connect to receiver via PeerJS
+        const peerConn = await createSenderPeer(senderJoinCode);
+        peerRef.current = peerConn;
+        // receive room info from receiver
+        const payload = await new Promise<any>((resolve, reject) => {
+          peerConn.conn.on("error", reject);
+          peerConn.conn.on("data", resolve);
+        });
+        ip = payload.net.primary_ip || payload.net.all_ips[0] || "127.0.0.1";
+        hostname = payload.net.hostname || "localhost";
+        room = payload.room;
+        password = payload.password;
+        socketBase = `http://${ip}:8080`;
       }
-      setRemote({ status: "connecting", info: null, errorMessage: null });
+      // proceed with Socket.IO connection
       const sock = connectSocket(socketBase);
       socketRef.current = sock;
       const joined = await joinRoom(sock, { room, password });
       setClientId(joined.client_id);
       if (role === "receiver") {
-        await subscribe(sock, {
-          room,
-          channels: ["settings-sync", "playback"],
-        });
+        await subscribe(sock, { room, channels: ["settings-sync", "playback"] });
       }
-      setRemote({
-        status: "connected",
-        info: { ip, hostname, room, password },
-        errorMessage: null,
-      });
+      setRemote({ status: "connected", info: { ip, hostname, room, password }, errorMessage: null });
     } catch (err: any) {
-      setRemote({
-        status: "error",
-        info: null,
-        errorMessage: err?.message || "Remote play connection failed.",
-      });
+      setRemote({ status: "error", info: null, errorMessage: err?.message || "Remote play connection failed." });
     }
-  }, [
-    backendBase,
-    senderIp,
-    senderJoinCode,
-    setReceiverInviteStatus,
-    setReceiverInviteCode,
-  ]);
+  }, [backendBase, senderJoinCode]);
 
   const turnRemoteOff = useCallback(() => {
     setRemote({ status: "off", info: null });
   }, [setRemote]);
   const armAsReceiver = useCallback(() => {
     roleRef.current = "receiver";
-    setReceiverInviteStatus("idle");
     setReceiverInviteCode(null);
     setRemote({ status: "receiver_armed", info: null });
     beginRemoteHandshake();
-  }, [
-    setRemote,
-    beginRemoteHandshake,
-    setReceiverInviteStatus,
-    setReceiverInviteCode,
-  ]);
+  }, [setRemote, beginRemoteHandshake]);
 
   const armAsSender = useCallback(() => {
     roleRef.current = "sender";
@@ -1022,74 +943,8 @@ export default function Play() {
                   <Div display="flex" flexDirection="column" gap="0.5rem">
                     {receiverInviteCode ? (
                       <>
-                        <Span>
-                          <strong>Share this code:</strong> {receiverInviteCode}
-                        </Span>
-                        {receiverInviteStatus === "idle" && (
-                          <Span>Waiting for a sender…</Span>
-                        )}
-                        {receiverInviteStatus === "pending" && (
-                          <>
-                            <Span>
-                              Incoming request{" "}
-                              {receiverRequestedBy?.ip
-                                ? `from ${receiverRequestedBy.ip}`
-                                : ""}
-                              .
-                            </Span>
-                            <Div display="flex" gap="0.5rem">
-                              <Button
-                                onClick={async () => {
-                                  await fetch(
-                                    `${backendBase}/invite/decision`,
-                                    {
-                                      method: "POST",
-                                      headers: {
-                                        "Content-Type": "application/json",
-                                      },
-                                      body: JSON.stringify({
-                                        code: receiverInviteCode,
-                                        accept: true,
-                                      }),
-                                    }
-                                  );
-                                  // status poller will flip to approved
-                                }}
-                              >
-                                Approve
-                              </Button>
-                              <Button
-                                background="#eee"
-                                onClick={async () => {
-                                  await fetch(
-                                    `${backendBase}/invite/decision`,
-                                    {
-                                      method: "POST",
-                                      headers: {
-                                        "Content-Type": "application/json",
-                                      },
-                                      body: JSON.stringify({
-                                        code: receiverInviteCode,
-                                        accept: false,
-                                      }),
-                                    }
-                                  );
-                                  // status poller will flip to denied
-                                }}
-                              >
-                                Deny
-                              </Button>
-                            </Div>
-                          </>
-                        )}
-                        {receiverInviteStatus === "approved" && (
-                          <Span>Approved — waiting for sender to connect…</Span>
-                        )}
-                        {receiverInviteStatus === "denied" && (
-                          <Span>
-                            Request denied. You can close or start a new invite.
-                          </Span>
-                        )}
+                        <Span><strong>Share this code:</strong> {receiverInviteCode}</Span>
+                        <Span>Waiting for sender to connect…</Span>
                       </>
                     ) : (
                       <Span>Preparing invite…</Span>
@@ -1100,26 +955,13 @@ export default function Play() {
                 {remote.status === "sender_armed" && (
                   <Div display="flex" flexDirection="column" gap="0.5rem">
                     <label>
-                      IP / Host:
-                      <input
-                        autoCapitalize="off"
-                        autoComplete="off"
-                        autoCorrect="off"
-                        value={senderIp}
-                        onChange={(e) => setSenderIp(e.target.value)}
-                        placeholder="e.g. 192.168.1.23"
-                      />
-                    </label>
-                    <label>
-                      Join Code:
+                      Invite Code:
                       <input
                         autoCapitalize="off"
                         autoComplete="off"
                         autoCorrect="off"
                         value={senderJoinCode}
-                        onChange={(e) =>
-                          setSenderJoinCode(e.target.value.toUpperCase())
-                        }
+                        onChange={(e) => setSenderJoinCode(e.target.value.toUpperCase())}
                         placeholder="6 letters/digits"
                       />
                     </label>
@@ -1142,7 +984,7 @@ export default function Play() {
               <>
                 <Span>Connecting to remote play…</Span>
                 <Span style={{ fontSize: "0.9rem", opacity: 0.7 }}>
-                  Placeholder: awaiting backend to return connection info.
+                  Awaiting PeerJS connection…
                 </Span>
                 <Button background="#eee" onClick={turnRemoteOff}>
                   Cancel
