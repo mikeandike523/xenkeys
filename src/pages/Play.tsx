@@ -44,7 +44,12 @@ import { css } from "@emotion/react";
 import Recorder, { type Recording } from "../audio/recorder";
 import VolumeSlider from "../components/VolumeSlider";
 import { connectSocket, joinRoom, subscribe, publish } from "../remote/socket";
-import type { InviteRedeemResponse, InviteStartResponse, InviteStatus, SettingsSyncPayload } from "../shared-types/remote";
+import type {
+  InviteRedeemResponse,
+  InviteStartResponse,
+  InviteStatus,
+  SettingsSyncPayload,
+} from "../shared-types/remote";
 
 const default12EdoManifest = make12EDO();
 const default19EdoManifest = make19EDO();
@@ -85,7 +90,10 @@ type RemoteStatus =
 type RemoteInfo = {
   ip: string;
   hostname: string;
-  code: string; // Ephemeral invite code
+  /** socket.io room name for messages */
+  room: string;
+  /** password for the socket.io room */
+  password: string;
 };
 
 type RemotePlayState = {
@@ -320,7 +328,8 @@ export default function Play() {
           data: { id, freq: pitch, envelope },
         };
         publish(sock, {
-          room: remote.info.code,
+          room: remote.info.room,
+          password: remote.info.password,
           client_id: clientId,
           channel: "playback",
           message: JSON.stringify(msg),
@@ -347,7 +356,8 @@ export default function Play() {
       ) {
         const msg: NoteOffMsg = { type: "noteOff", data: { id } };
         publish(sock, {
-          room: remote.info.code,
+          room: remote.info.room,
+          password: remote.info.password,
           client_id: clientId,
           channel: "playback",
           message: JSON.stringify(msg),
@@ -396,28 +406,16 @@ export default function Play() {
   const openRemoteDialog = useCallback(() => setShowRemoteDialog(true), []);
   const closeRemoteDialog = useCallback(() => setShowRemoteDialog(false), []);
 
-  const turnRemoteOff = useCallback(() => {
-    setRemote({ status: "off", info: null });
-  }, [setRemote]);
-  const armAsReceiver = useCallback(() => {
-    roleRef.current = "receiver";
-    setRemote({ status: "receiver_armed", info: null });
-  }, [setRemote]);
-
-  const armAsSender = useCallback(() => {
-    roleRef.current = "sender";
-    setRemote({ status: "sender_armed", info: null });
-  }, [setRemote]);
-
   const beginRemoteHandshake = useCallback(async () => {
-    setRemote({ status: "connecting", info: null, errorMessage: null });
     try {
       const role = roleRef.current === "sender" ? "sender" : "receiver";
-      let ip = "";
-      let hostname = "";
-      let code = "";
-      let socketBase = "";
+      let ip = "",
+        hostname = "",
+        room = "",
+        password = "",
+        socketBase = "";
       if (role === "sender") {
+        setRemote({ status: "connecting", info: null, errorMessage: null });
         if (!senderIp || !senderJoinCode) {
           throw new Error("Please enter IP/Host and Join Code.");
         }
@@ -442,9 +440,12 @@ export default function Play() {
         }
         ip = senderIp.trim();
         hostname = senderIp.trim();
-        code = senderJoinCode.trim().toUpperCase();
+        room = out.room;
+        password = out.password;
         socketBase = base;
       } else {
+        setReceiverInviteStatus("idle");
+        setReceiverInviteCode(null);
         const res = await fetch(`${backendBase}/invite/start`, {
           method: "POST",
           mode: "cors",
@@ -456,7 +457,8 @@ export default function Play() {
         setReceiverInviteCode(data.code);
         ip = data.net.primary_ip || data.net.all_ips[0] || "127.0.0.1";
         hostname = data.net.hostname || "localhost";
-        code = data.code;
+        room = data.room;
+        password = data.password;
         socketBase = backendBase;
         (async () => {
           try {
@@ -484,25 +486,57 @@ export default function Play() {
           }
         })();
       }
-      setRemote({ status: "connected", info: { ip, hostname, code }, errorMessage: null });
+      setRemote({ status: "connecting", info: null, errorMessage: null });
       const sock = connectSocket(socketBase);
       socketRef.current = sock;
-      const joined = await joinRoom(sock, { room: code });
+      const joined = await joinRoom(sock, { room, password });
       setClientId(joined.client_id);
       if (role === "receiver") {
-        await subscribe(sock, { room: code, channels: ["settings-sync", "playback"] });
+        await subscribe(sock, {
+          room,
+          channels: ["settings-sync", "playback"],
+        });
       }
+      setRemote({
+        status: "connected",
+        info: { ip, hostname, room, password },
+        errorMessage: null,
+      });
     } catch (err: any) {
-      setRemote({ status: "error", info: null, errorMessage: err?.message || "Remote play connection failed." });
+      setRemote({
+        status: "error",
+        info: null,
+        errorMessage: err?.message || "Remote play connection failed.",
+      });
     }
-  }, [backendBase, senderIp, senderJoinCode]);
+  }, [
+    backendBase,
+    senderIp,
+    senderJoinCode,
+    setReceiverInviteStatus,
+    setReceiverInviteCode,
+  ]);
 
-  // Automatically start handshake when receiver is armed to simplify flow
-  useEffect(() => {
-    if (remote.status === "receiver_armed") {
-      beginRemoteHandshake();
-    }
-  }, [remote.status, beginRemoteHandshake]);
+  const turnRemoteOff = useCallback(() => {
+    setRemote({ status: "off", info: null });
+  }, [setRemote]);
+  const armAsReceiver = useCallback(() => {
+    roleRef.current = "receiver";
+    setReceiverInviteStatus("idle");
+    setReceiverInviteCode(null);
+    setRemote({ status: "receiver_armed", info: null });
+    beginRemoteHandshake();
+  }, [
+    setRemote,
+    beginRemoteHandshake,
+    setReceiverInviteStatus,
+    setReceiverInviteCode,
+  ]);
+
+  const armAsSender = useCallback(() => {
+    roleRef.current = "sender";
+    setRemote({ status: "sender_armed", info: null });
+  }, [setRemote]);
 
   const disconnectRemote = useCallback(() => {
     // Optional: sock cleanup
@@ -600,7 +634,8 @@ export default function Play() {
     };
 
     publish(sock, {
-      room: info.code,
+      room: info.room,
+      password: info.password,
       client_id: clientId,
       channel: "settings-sync",
       message: JSON.stringify(payload),
@@ -1123,9 +1158,6 @@ export default function Play() {
                 >
                   <Span>
                     <strong>Client Id:</strong> {clientId}
-                  </Span>
-                  <Span>
-                    <strong>Code:</strong> {remote.info.code}
                   </Span>
                   <Span>
                     <strong>IP:</strong> {remote.info.ip}
