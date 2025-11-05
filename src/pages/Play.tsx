@@ -460,31 +460,36 @@ export default function Play() {
         room = data.room;
         password = data.password;
         socketBase = backendBase;
-        (async () => {
-          try {
-            while (true) {
-              const st = await fetch(
-                `${backendBase}/invite/status?code=${data.code}`
-              );
-              const js = (await st.json()) as InviteStatus;
-              if (js.status === "pending") {
-                setReceiverInviteStatus("pending");
-                setReceiverRequestedBy(js.requested_by || null);
-              } else if (js.status === "approved") {
-                setReceiverInviteStatus("approved");
-                break;
-              } else if (js.status === "denied") {
-                setReceiverInviteStatus("denied");
-                break;
-              } else {
-                setReceiverInviteStatus("idle");
-              }
-              await new Promise((r) => setTimeout(r, 1000));
+        // poll invite status and wait for approval or denial
+        let finalStatus: InviteStatus['status'] = 'idle';
+        try {
+          while (true) {
+            const st = await fetch(
+              `${backendBase}/invite/status?code=${data.code}`
+            );
+            const js = (await st.json()) as InviteStatus;
+            if (js.status === 'pending') {
+              setReceiverInviteStatus('pending');
+              setReceiverRequestedBy(js.requested_by || null);
+            } else if (js.status === 'approved') {
+              setReceiverInviteStatus('approved');
+              finalStatus = 'approved';
+              break;
+            } else if (js.status === 'denied') {
+              setReceiverInviteStatus('denied');
+              finalStatus = 'denied';
+              break;
+            } else {
+              setReceiverInviteStatus('idle');
             }
-          } catch {
-            /* swallow polling errors */
+            await new Promise((r) => setTimeout(r, 1000));
           }
-        })();
+        } catch {
+          /* swallow polling errors */
+        }
+        if (finalStatus !== 'approved') {
+          throw new Error('Invite denied or expired.');
+        }
       }
       setRemote({ status: "connecting", info: null, errorMessage: null });
       const sock = connectSocket(socketBase);
