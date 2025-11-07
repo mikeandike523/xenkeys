@@ -1,13 +1,16 @@
 import { css } from "@emotion/react";
 import { useRef } from "react";
 import { FaHome } from "react-icons/fa";
-import { A, Div, Header, Main } from "style-props-html";
+import { A, Button, Div, Header, Main } from "style-props-html";
 import { useElementRefBySelector } from "../hooks/fwk/useElementRefBySelector";
 import { useElementSize } from "../hooks/fwk/useElementSize";
 import useMonacoEditor from "../hooks/useMonacoEditor";
 import MonacoView from "../components/MonacoView";
 import { usePersistentState } from "../hooks/fwk/usePersistentState";
 import VolumeSlider from "../components/VolumeSlider";
+import useConsoleViewState from "@/hooks/useConsoleViewState";
+import ConsoleView from "@/components/ConsoleView";
+import compile from "@/xenlang/compile";
 
 export default function Compose() {
   const bodyRef = useElementRefBySelector<HTMLBodyElement>("body");
@@ -23,6 +26,19 @@ export default function Compose() {
   const codeEditorManager = useMonacoEditor();
 
   const [volumePct, setVolumePct] = usePersistentState<number>("volume", 80);
+
+  const consoleDivRef = useRef<HTMLDivElement>(null);
+
+  const consoleState = useConsoleViewState(consoleDivRef);
+
+  const compileScript = async () => {
+    compile(codeEditorManager.getValue(), {
+      onLog: (msg) => consoleState.addMessage("log", msg),
+      onWarning: (msg) => consoleState.addMessage("warning", msg),
+      onError: (msg) => consoleState.addMessage("error", msg),
+      onInfo: (msg) => consoleState.addMessage("info", msg),
+    });
+  };
 
   return (
     <>
@@ -63,6 +79,11 @@ export default function Compose() {
         <Div display="flex" alignItems="center">
           <VolumeSlider value={volumePct} onChange={setVolumePct} />
         </Div>
+
+        <Div marginLeft="auto"></Div>
+        <Button onClick={compileScript} padding="0.5rem">
+          Compile
+        </Button>
       </Header>
       <Main
         ref={playAreaRef}
@@ -75,7 +96,7 @@ export default function Compose() {
       >
         <Div></Div>
         <MonacoView manager={codeEditorManager} />
-        <Div></Div>
+        <ConsoleView ref={consoleDivRef} state={consoleState} height={`${bodyHeight - cpanelHeight}px`} overflowY="auto" />
       </Main>
     </>
   );

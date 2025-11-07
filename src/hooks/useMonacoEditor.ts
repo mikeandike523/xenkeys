@@ -18,13 +18,15 @@ export default function useMonacoEditor(opts?: Options): MonacoManager {
 
     modelRef.current = monaco.editor.createModel(
       opts?.defaultValue ?? "",
-      "plaintext" // no highlighting for now
+      "yaml"
     );
 
     editorRef.current = monaco.editor.create(el, {
       model: modelRef.current,
       automaticLayout: false, // we'll use ResizeObserver
       minimap: { enabled: false },
+      tabSize: 2,
+      detectIndentation: false,
       theme: "vs-dark",
       ...opts,
     });
