@@ -1,5 +1,5 @@
 import { css } from "@emotion/react";
-import { useRef } from "react";
+import { useRef, useEffect } from "react";
 import { FaHome } from "react-icons/fa";
 import { A, Button, Div, Header, Main } from "style-props-html";
 import { useElementRefBySelector } from "../hooks/fwk/useElementRefBySelector";
@@ -30,6 +30,23 @@ export default function Compose() {
   const consoleDivRef = useRef<HTMLDivElement>(null);
 
   const consoleState = useConsoleViewState(consoleDivRef);
+  // Persist code editor content using IndexedDB
+  const [code, setCode] = usePersistentState<string>("composeCode", "");
+
+  // Load persisted code into editor when available
+  useEffect(() => {
+    codeEditorManager.setValue(code);
+  }, [code, codeEditorManager]);
+
+  // Save editor content on each change
+  useEffect(() => {
+    const editor = codeEditorManager.editor();
+    if (!editor) return;
+    const disposable = editor.onDidChangeModelContent(() => {
+      setCode(codeEditorManager.getValue());
+    });
+    return () => disposable.dispose();
+  }, [codeEditorManager, setCode]);
 
   const compileScript = async () => {
     compile(codeEditorManager.getValue(), {
