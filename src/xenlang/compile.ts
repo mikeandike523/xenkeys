@@ -1,5 +1,3 @@
-import { parse } from 'yaml'
-
 export type OnLogHandler = (message: string) => void;
 export type OnWarningHandler = (message: string) => void;
 export type OnErrorHandler = (message: string) => void;
@@ -22,8 +20,11 @@ export default function compile(
   source = source.replace(/\r\n/g, "\n")
 
   try {
-    const data = parse(source)
-    onLog(JSON.stringify(data, null, 2))
+    
+    // Run lua code
+    // Lua code should return a fairly large object with tracks and events
+    // Play and pause button will be separate
+
   } catch (error) {
     onError(`Compilation failed: ${error instanceof Error ? error.message : 'unknown error'}`);
     return;

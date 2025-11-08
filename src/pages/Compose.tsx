@@ -112,8 +112,24 @@ export default function Compose() {
         gridTemplateColumns="1fr 2fr 1fr"
       >
         <Div></Div>
-        <MonacoView manager={codeEditorManager} />
-        <ConsoleView ref={consoleDivRef} state={consoleState} height={`${bodyHeight - cpanelHeight}px`} overflowY="auto" />
+        <Div
+          height={`${bodyHeight - cpanelHeight}px`}
+          display="grid"
+          gridTemplateColumns="1fr"
+          gridTemplateRows="auto 1fr"
+        >
+          <Div color="red" fontSize="1.5rem" fontWeight="bold">
+            Code is executed using wasmoon.
+             {/* Todo: Include button / link to article on how to include external libaries*/}
+          </Div>
+          <MonacoView manager={codeEditorManager} />
+        </Div>
+        <ConsoleView
+          ref={consoleDivRef}
+          state={consoleState}
+          height={`${bodyHeight - cpanelHeight}px`}
+          overflowY="auto"
+        />
       </Main>
     </>
   );

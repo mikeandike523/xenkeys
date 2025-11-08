@@ -18,7 +18,7 @@ export default function useMonacoEditor(opts?: Options): MonacoManager {
 
     modelRef.current = monaco.editor.createModel(
       opts?.defaultValue ?? "",
-      "yaml"
+      "lua"
     );
 
     editorRef.current = monaco.editor.create(el, {
