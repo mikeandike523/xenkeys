@@ -1,39 +1,20 @@
 import LuaWorker from "@/workers/lua.worker.ts?worker";
 
-export type LuaWorkerLoaderConfig = {
-  baseUrl?: string;        // e.g. "/lua" or "https://cdn.example.com/lua"
-  packagePrefix?: string;  // e.g. "myapp" (handle only require("myapp.*"))
-};
+/**
+ * A map from Lua package name -> URL to fetch its source string.
+ * Example: { "app.util": "/lua/app/util.lua", "app.math": "/lua/app/math.lua" }
+ */
+export type ModuleUrlMap = Record<string, string>;
 
 export class LuaWorkerClient {
   private worker = new LuaWorker();
-  private baseUrl: string;
-  private prefix: string;
 
-  constructor(config: LuaWorkerLoaderConfig = {}) {
-    this.baseUrl = config.baseUrl ?? "/lua";
-    this.prefix = config.packagePrefix ?? "";
-    this.init();
-  }
+  modules?: ModuleUrlMap;
 
-  private init(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const handler = (e: MessageEvent) => {
-        if (e.data.type === "ready") {
-          this.worker.removeEventListener("message", handler);
-          resolve();
-        }
-        if (e.data.type === "error") {
-          this.worker.removeEventListener("message", handler);
-          reject(new Error(e.data.message));
-        }
-      };
-      this.worker.addEventListener("message", handler);
-      this.worker.postMessage({
-        type: "init",
-        loader: { baseUrl: this.baseUrl, packagePrefix: this.prefix || undefined },
-      });
-    });
+  // No constructor init/handshake needed anymore
+
+  constructor({modules}: { modules?: ModuleUrlMap }) {
+    this.modules = modules;
   }
 
   onStdout(handler: (line: string) => void) {
@@ -44,22 +25,6 @@ export class LuaWorkerClient {
     return () => this.worker.removeEventListener("message", listener);
   }
 
-  // --- minimal require() scanner + loader -----------------------------
-
-  private findRequires(src: string): string[] {
-    const out = new Set<string>();
-    const re = /require\s*\(\s*["']([^"']+)["']\s*\)/g;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(src))) out.add(m[1]);
-    return [...out];
-  }
-
-  private moduleUrl(name: string): string {
-    const cleanBase = this.baseUrl.replace(/\/+$/, "");
-    const path = name.replace(/\./g, "/") + ".lua";
-    return `${cleanBase}/${path}`;
-  }
-
   private async fetchText(url: string): Promise<string> {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.status}`);
@@ -67,67 +32,24 @@ export class LuaWorkerClient {
   }
 
   /**
-   * Minimal “smart loader”: scan requires in `code` recursively (under prefix),
-   * fetch them from baseUrl, push into worker cache.
+   * Minimal API:
+   * - Give us the entry code and a map of modules -> urls.
+   * - We'll prefetch them as strings, send in a single 'run' message,
+   *   and the worker will create a fresh engine, install modules, and execute.
    */
-  private async smartLoadWithBaseUrl(code: string, maxDepth = 16): Promise<number> {
-    const shouldHandle = (n: string) => this.prefix === "" || n.startsWith(this.prefix);
+  async run(code: string, {
+    modules
+  }:{
+    modules?: ModuleUrlMap
+  }): Promise<any> {
+    // Prefetch module sources
 
-    const queued = new Set<string>();
-    const loaded = new Map<string, string>();
+    const resolvedModules = {...(modules??{}), ...(this.modules??{})}
+    const names = Object.keys(resolvedModules);
+    const texts = await Promise.all(names.map((n) => this.fetchText(resolvedModules[n])));
+    const payload = names.map((name, i) => ({ name, src: texts[i] }));
 
-    const enqueue = (n: string) => {
-      if (shouldHandle(n) && !queued.has(n) && !loaded.has(n)) queued.add(n);
-    };
-
-    // seed from entry code
-    this.findRequires(code).forEach(enqueue);
-
-    for (let depth = 0; depth < maxDepth && queued.size > 0; depth++) {
-      const batch = Array.from(queued);
-      queued.clear();
-
-      const fetched = await Promise.all(
-        batch.map(async (name) => {
-          const src = await this.fetchText(this.moduleUrl(name));
-          return { name, src };
-        })
-      );
-
-      for (const { name, src } of fetched) {
-        loaded.set(name, src);
-        this.findRequires(src).forEach(enqueue);
-      }
-    }
-
-    if (loaded.size > 0) {
-      await new Promise<void>((resolve, reject) => {
-        const handler = (e: MessageEvent) => {
-          if (e.data.type === "cached") {
-            this.worker.removeEventListener("message", handler);
-            resolve();
-          }
-          if (e.data.type === "error") {
-            this.worker.removeEventListener("message", handler);
-            reject(new Error(e.data.message));
-          }
-        };
-        this.worker.addEventListener("message", handler);
-        const modules = Array.from(loaded.entries()).map(([name, src]) => ({ name, src }));
-        this.worker.postMessage({ type: "cache", modules });
-      });
-    }
-
-    return loaded.size;
-  }
-
-  /**
-   * Public API: just call run(code). It will:
-   * 1) recursively cache required modules (under prefix) from baseUrl
-   * 2) execute the code
-   */
-  async run(code: string): Promise<any> {
-    await this.smartLoadWithBaseUrl(code);
+    // Send one 'run' message and await the result
     return new Promise((resolve, reject) => {
       const handler = (e: MessageEvent) => {
         if (e.data.type === "result") {
@@ -140,7 +62,7 @@ export class LuaWorkerClient {
         }
       };
       this.worker.addEventListener("message", handler);
-      this.worker.postMessage({ type: "run", code });
+      this.worker.postMessage({ type: "run", code, modules: payload });
     });
   }
 

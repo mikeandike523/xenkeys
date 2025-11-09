@@ -33,8 +33,9 @@ export default function Compose() {
   const consoleState = useConsoleViewState(consoleDivRef);
   const luaWorkerClient = useMemo(() => {
     return new LuaWorkerClient({
-      baseUrl: "/xentheory", // where /my-lua/foo/bar.lua lives
-      packagePrefix: "xentheory", // only handle require("myapp.*") in the smart loader
+      modules: {
+        "xentheory.types":"/xentheory/types.lua",
+      }
     });
   }, []);
 

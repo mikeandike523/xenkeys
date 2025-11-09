@@ -27,7 +27,7 @@ export default async function compile(
     onLog("Beginning compilation...");
 
     const result = await luaWorkerClient.run(
-      source
+      source, {}
     );
 
     onLog("Compilation successful!");
