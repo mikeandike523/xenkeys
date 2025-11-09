@@ -26,13 +26,8 @@ export default async function compile(
 
     onLog("Beginning compilation...");
 
-    const result = await luaWorkerClient.runWithXenModules(
-      source,
-      {
-        prefix: "xentheory",
-        base: "/xentheory", // change if your public path differs
-        maxDepth: 16, // optional recursive depth for transitive requires
-      }
+    const result = await luaWorkerClient.run(
+      source
     );
 
     onLog("Compilation successful!");

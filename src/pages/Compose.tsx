@@ -32,19 +32,28 @@ export default function Compose() {
 
   const consoleState = useConsoleViewState(consoleDivRef);
   const luaWorkerClient = useMemo(() => {
-    return new LuaWorkerClient()
-  },[])
-
+    return new LuaWorkerClient({
+      baseUrl: "/xentheory", // where /my-lua/foo/bar.lua lives
+      packagePrefix: "xentheory", // only handle require("myapp.*") in the smart loader
+    });
+  }, []);
 
   const compileScript = async () => {
-    const result = await compile(luaWorkerClient,codeEditorManager.getValue(), {
-      onLog: (msg) => consoleState.addMessage("log", msg),
-      onWarning: (msg) => consoleState.addMessage("warning", msg),
-      onError: (msg) => consoleState.addMessage("error", msg),
-      onInfo: (msg) => consoleState.addMessage("info", msg),
-    });
-    console.info(result)
-    consoleState.addMessage("info", `Compilation result:\n${JSON.stringify(result, null, 2)}`);
+    const result = await compile(
+      luaWorkerClient,
+      codeEditorManager.getValue(),
+      {
+        onLog: (msg) => consoleState.addMessage("log", msg),
+        onWarning: (msg) => consoleState.addMessage("warning", msg),
+        onError: (msg) => consoleState.addMessage("error", msg),
+        onInfo: (msg) => consoleState.addMessage("info", msg),
+      }
+    );
+    console.info(result);
+    consoleState.addMessage(
+      "info",
+      `Compilation result:\n${JSON.stringify(result, null, 2)}`
+    );
   };
 
   return (
@@ -110,7 +119,7 @@ export default function Compose() {
         >
           <Div color="red" fontSize="1.5rem" fontWeight="bold">
             Code is executed using wasmoon.
-             {/* Todo: Include button / link to article on how to include external libaries*/}
+            {/* Todo: Include button / link to article on how to include external libaries*/}
           </Div>
           <MonacoView manager={codeEditorManager} />
         </Div>
