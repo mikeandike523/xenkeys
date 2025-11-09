@@ -34,7 +34,7 @@ export default function Compose() {
   const luaWorkerClient = useMemo(() => {
     return new LuaWorkerClient({
       modules: {
-        "xentheory.types":"/xentheory/types.lua",
+        "public.xentheory.types":"/xentheory/types.lua",
       }
     });
   }, []);

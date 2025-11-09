@@ -133,8 +133,6 @@ function Song:new(args)
     local s = {
         title               = args.title or "Untitled",
         master_gain         = args.master_gain or 1.0,
-        default_edo_preset  = args.default_edo_preset,
-        A4_tuning_hz        = args.A4_tuning_hz,
         tracks              = args.tracks or {},
         grids               = args.grids or {},
     }
