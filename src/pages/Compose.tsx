@@ -24,34 +24,17 @@ export default function Compose() {
   const bodyHeight = bodySize?.height || 0;
   const cpanelHeight = cpanelSize?.height || 0;
 
-  const codeEditorManager = useMonacoEditor();
+  const codeEditorManager = useMonacoEditor({ persistKey: "composeCode" });
 
   const [volumePct, setVolumePct] = usePersistentState<number>("volume", 80);
 
   const consoleDivRef = useRef<HTMLDivElement>(null);
 
   const consoleState = useConsoleViewState(consoleDivRef);
-  // Persist code editor content using IndexedDB
-  const [code, setCode] = usePersistentState<string>("composeCode", "");
-
   const luaWorkerClient = useMemo(() => {
     return new LuaWorkerClient()
   },[])
 
-  // Load persisted code into editor when available
-  useEffect(() => {
-    codeEditorManager.setValue(code);
-  }, [code, codeEditorManager]);
-
-  // Save editor content on each change
-  useEffect(() => {
-    const editor = codeEditorManager.editor();
-    if (!editor) return;
-    const disposable = editor.onDidChangeModelContent(() => {
-      setCode(codeEditorManager.getValue());
-    });
-    return () => disposable.dispose();
-  }, [codeEditorManager, setCode]);
 
   const compileScript = async () => {
     const result = await compile(luaWorkerClient,codeEditorManager.getValue(), {
