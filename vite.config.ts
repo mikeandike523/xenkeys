@@ -25,6 +25,9 @@ console.log("🔗 Vite alias map:", alias);
 // --- Vite config ---
 export default defineConfig({
   resolve: { alias },
+  worker: {
+    format: 'es',   // ensures modern module workers
+  },
   server: {
     allowedHosts: [
       "wirestheyeen.ngrok.app"

@@ -1,11 +1,10 @@
 import { v4 as uuidv4 } from "uuid";
-
+import { useEffect, useRef, useState, useCallback, type RefObject } from "react";
 import {
   type ConsoleViewState,
   type ConsoleViewMessage,
   type ConsoleViewMessageKind,
 } from "@/shared-types/console-view";
-import { useEffect, useRef, useState, type RefObject } from "react";
 
 const defaultKindColors = {
   log: "black",
@@ -20,65 +19,66 @@ export default function useConsoleViewState(
   consoleRef: RefObject<HTMLDivElement | null>
 ): ConsoleViewState {
   const messageMapRef = useRef<Map<string, ConsoleViewMessage>>(new Map());
-  // Mechanism to force rerender on change
-  const [version, setVersion] = useState<number>(0);
-  const forceRerender = () => setVersion(version+ 1);
+
+  const [, setVersion] = useState(0);
+  // ✅ Always increments from the latest state; no stale closure risk.
+  const forceRerender = useCallback(() => {
+    setVersion((v) => v + 1);
+  }, []);
 
   useEffect(() => {
-    if (consoleRef.current) {
-      // Smoothly scroll to bottom
-      consoleRef.current.scrollTo({
-        top: consoleRef.current.scrollHeight,
-        behavior: "smooth",
-      });
-    }
-  }, [version]);
+    const el = consoleRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  }, [consoleRef]); // version is no longer needed as a dep since forceRerender triggers a render anyway
 
-  const addMessage = (
-    kind: ConsoleViewMessageKind,
-    text: string,
-    color?: string
-  ) => {
-    const newId = uuidv4();
-    const newMessage: ConsoleViewMessage = {
-      kind,
-      text,
-      color: color ?? defaultKindColors[kind],
-    };
-    messageMapRef.current.set(newId, newMessage);
-    if(messageMapRef.current.size > ROTATE) {
-        const oldestId = messageMapRef.current.keys().next().value;
-        messageMapRef.current.delete(oldestId!);
-    }
-    forceRerender();
-  };
-  const removeMessage = (id: string) => {
+  const addMessage = useCallback(
+    (kind: ConsoleViewMessageKind, text: string, color?: string) => {
+      const newId = uuidv4();
+      const newMessage: ConsoleViewMessage = {
+        kind,
+        text,
+        color: color ?? defaultKindColors[kind],
+      };
+      const map = messageMapRef.current;
+      map.set(newId, newMessage);
+      if (map.size > ROTATE) {
+        const oldestId = map.keys().next().value as string | undefined;
+        if (oldestId) map.delete(oldestId);
+      }
+      forceRerender();
+    },
+    [forceRerender]
+  );
+
+  const removeMessage = useCallback((id: string) => {
     messageMapRef.current.delete(id);
     forceRerender();
-  };
-  const updateMessage = (id: string, updates: Partial<ConsoleViewMessage>) => {
-    const existing = messageMapRef.current.get(id);
-    if (!existing) return;
-    const updatedMessage = { ...existing, ...updates };
-    messageMapRef.current.set(id, updatedMessage);
-    forceRerender();
-  };
-  const getMessages = () => {
+  }, [forceRerender]);
+
+  const updateMessage = useCallback(
+    (id: string, updates: Partial<ConsoleViewMessage>) => {
+      const map = messageMapRef.current;
+      const existing = map.get(id);
+      if (!existing) return;
+      map.set(id, { ...existing, ...updates });
+      forceRerender();
+    },
+    [forceRerender]
+  );
+
+  const getMessages = useCallback(() => {
     const result: Array<[string, ConsoleViewMessage]> = [];
     messageMapRef.current.forEach((message, id) => {
       result.push([id, message]);
     });
     return result;
-  };
-  const clearMessages = () => {
+  }, []);
+
+  const clearMessages = useCallback(() => {
     messageMapRef.current.clear();
     forceRerender();
-  };
-  return {
-    addMessage,
-    updateMessage,
-    removeMessage,
-    getMessages,
-    clearMessages,
-  };
+  }, [forceRerender]);
+
+  return { addMessage, updateMessage, removeMessage, getMessages, clearMessages };
 }
