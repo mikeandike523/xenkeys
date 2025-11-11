@@ -7,7 +7,7 @@ export type SettingsSyncPayload = {
   manifestName: string;
   waveform: Waveform;            // "sound preset"
   envelope: Envelope;            // ADSR
-  volumePct: number;             // 0..100
+  gainPct: number;               // 0..100
   startingOctave: number;        // oct start
   octaveCount: number;           // oct count
 };

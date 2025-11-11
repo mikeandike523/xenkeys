@@ -150,6 +150,7 @@ class PolyVoice {
 
   public noteId = 0;
   public waveform: Waveform = 'sine';
+  private velocity: number = 1;
 
   constructor(sr: number) {
     this.sr = sr;
@@ -159,7 +160,7 @@ class PolyVoice {
     return this._state;
   }
 
-  noteOn(freq: number, id: number, env: Envelope): void {
+noteOn(freq: number, id: number, env: Envelope, velocity: number): void {
     this._freq = freq;
     this.noteId = id;
     this._state = 'attack';
@@ -170,6 +171,7 @@ class PolyVoice {
     this.decaySamples = secondsToSamples(env.decay, this.sr);
     this.releaseSamples = secondsToSamples(env.release, this.sr);
     this.sustainLevel = clamp(env.sustain, 0, 1);
+    this.velocity = velocity;
   }
 
   noteOff(id: number): void {
@@ -243,14 +245,14 @@ class PolyVoice {
     sample *= norm;
 
     this._samples++;
-    return sample * envAmp;
+    return sample * envAmp * this.velocity;
   }
 }
 
 // --- Processor ---------------------------------------------------------------
 
 type ParameterMap = {
-  volume: Float32Array;
+  gain: Float32Array;
 };
 
 const DEFAULT_ENV: Envelope = {
@@ -263,7 +265,7 @@ const DEFAULT_ENV: Envelope = {
 class PitchSynthProcessor extends AudioWorkletProcessor {
   static get parameterDescriptors(): AudioParamDescriptor[] {
     return [
-      { name: 'volume', defaultValue: 0.8, minValue: 0, maxValue: 1, automationRate: 'a-rate' },
+      { name: 'gain', defaultValue: 0.8, minValue: 0, maxValue: 1, automationRate: 'a-rate' },
     ];
   }
 
@@ -289,7 +291,7 @@ class PitchSynthProcessor extends AudioWorkletProcessor {
           };
           const v = this.findFreeOrSteal();
           v.setWaveform(this.waveform);
-          v.noteOn(msg.data.freq, msg.data.id, env);
+          v.noteOn(msg.data.freq, msg.data.id, env, msg.data.velocity);
           break;
         }
         case 'noteOff': {
@@ -363,13 +365,13 @@ class PitchSynthProcessor extends AudioWorkletProcessor {
       }
     }
 
-    const vol = parameters.volume;
+    const gainParam = parameters.gain;
     for (let i = 0; i < frameCount; i++) {
       let mix = 0;
       for (let v = 0; v < this.voices.length; v++) {
         mix += this.voices[v].process();
       }
-      const gain = vol.length > 1 ? vol[i] : vol[0];
+      const gain = gainParam.length > 1 ? gainParam[i] : gainParam[0];
 
       // Keep a little headroom since multiple voices can stack
       const s = mix * gain * (1.0/AVG_EXPECTED_SIMULTANEOUS_VOICES);

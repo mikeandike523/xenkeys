@@ -7,10 +7,10 @@ type Props = {
   onChange: (v: number) => void;
 };
 
-export default function VolumeSlider({ value, onChange }: Props) {
+export default function GainSlider({ value, onChange }: Props) {
   return (
     <div
-      aria-label="Volume"
+      aria-label="Gain"
       css={css`
         display: inline-flex;
         align-items: center;
@@ -18,7 +18,7 @@ export default function VolumeSlider({ value, onChange }: Props) {
         min-width: 140px;
       `}
     >
-      <span css={css`font-weight: bold; font-size: 0.9rem;`}>Vol</span>
+      <span css={css`font-weight: bold; font-size: 0.9rem;`}>Gain</span>
       <div
         css={css`
           flex: 1;
@@ -30,7 +30,7 @@ export default function VolumeSlider({ value, onChange }: Props) {
           max={100}
           value={value}
           onChange={(v) => typeof v === "number" && onChange(v)}
-          aria-label="Volume"
+          aria-label="Gain"
         />
       </div>
     </div>

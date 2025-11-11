@@ -7,7 +7,7 @@ import { useElementSize } from "../hooks/fwk/useElementSize";
 import useMonacoEditor from "../hooks/useMonacoEditor";
 import MonacoView from "../components/MonacoView";
 import { usePersistentState } from "../hooks/fwk/usePersistentState";
-import VolumeSlider from "../components/VolumeSlider";
+import GainSlider from "../components/GainSlider";
 import useConsoleViewState from "@/hooks/useConsoleViewState";
 import ConsoleView from "@/components/ConsoleView";
 import compile from "@/xenlang/compile";
@@ -26,7 +26,7 @@ export default function Compose() {
 
   const codeEditorManager = useMonacoEditor({ persistKey: "composeCode" });
 
-  const [volumePct, setVolumePct] = usePersistentState<number>("volume", 80);
+  const [gainPct, setGainPct] = usePersistentState<number>("gain", 80);
 
   const consoleDivRef = useRef<HTMLDivElement>(null);
 
@@ -94,7 +94,7 @@ export default function Compose() {
         </A>
 
         <Div display="flex" alignItems="center">
-          <VolumeSlider value={volumePct} onChange={setVolumePct} />
+        <GainSlider value={gainPct} onChange={setGainPct} />
         </Div>
 
         <Div marginLeft="auto"></Div>

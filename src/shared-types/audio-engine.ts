@@ -25,6 +25,7 @@ export type NoteOnMsg = {
     id: number;         // voice/note id from client
     freq: number;       // Hz, precomputed by client (any temperament)
     envelope?: Partial<Envelope>;
+    velocity: number;   // initial amplitude, 0..1
   };
 };
 

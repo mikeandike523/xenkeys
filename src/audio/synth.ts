@@ -37,8 +37,8 @@ export default class Synth {
     }
   }
 
-  noteOn(id: number, freq: number, envelope: Envelope): void {
-    const msg: PitchSynthMessage = { type: "noteOn", data: { id, freq, envelope } };
+  noteOn(id: number, freq: number, envelope: Envelope, velocity: number = 1): void {
+    const msg: PitchSynthMessage = { type: "noteOn", data: { id, freq, envelope, velocity } };
     this.node.port.postMessage(msg);
   }
 
@@ -57,10 +57,10 @@ export default class Synth {
     this.node.port.postMessage(msg);
   }
 
-  setVolume(v01: number): void {
-    const p = this.node.parameters.get("volume");
+  setGain(g01: number): void {
+    const p = this.node.parameters.get("gain");
     if (!p) return;
     // snap for now; could use setTargetAtTime for smoothing
-    p.setValueAtTime(Math.max(0, Math.min(1, v01)), this.context.currentTime);
+    p.setValueAtTime(Math.max(0, Math.min(1, g01)), this.context.currentTime);
   }
 }

@@ -26,7 +26,7 @@ import Recorder, { type Recording } from "../audio/recorder";
 import Synth from "../audio/synth";
 import CanvasKeyboard from "../components/CanvasKeyboard";
 import { NumberStepper } from "../components/NumberStepper";
-import VolumeSlider from "../components/VolumeSlider";
+import GainSlider from "../components/GainSlider";
 import { make12EDO } from "../data/edo-presets/12edo";
 import { make19EDO } from "../data/edo-presets/19edo";
 import { make22EDO } from "../data/edo-presets/22edo";
@@ -127,7 +127,7 @@ export default function Play() {
   const [playbackStart] = useState<number>(0);
   const [playbackEnd, setPlaybackEnd] = useState<number | null>(null);
 
-  const [volumePct, setVolumePct] = usePersistentState<number>("volume", 80);
+  const [gainPct, setGainPct] = usePersistentState<number>("gain", 80);
 
   // PeerJS P2P connection reference
   const peerRef = useRef<PeerConn | null>(null);
@@ -140,8 +140,8 @@ export default function Play() {
   const [receiverInviteCode, setReceiverInviteCode] = useState<string | null>(null);
 
   useEffect(() => {
-    if (synth) synth.setVolume(volumePct / 100);
-  }, [synth, volumePct]);
+    if (synth) synth.setGain(gainPct / 100);
+  }, [synth, gainPct]);
 
   // Init synth + recorder exactly once
   useEffect(() => {
@@ -290,12 +290,12 @@ export default function Play() {
       // local playback unless acting as remote sender
       if (!(remote.status === "connected" && roleRef.current === "sender")) {
         synth?.resume();
-        synth?.noteOn(id, pitch, envelope);
+        synth?.noteOn(id, pitch, envelope, 1);
       }
       // Remote sender: send note-on via PeerJS data channel
       const peerConn = peerRef.current;
       if (peerConn && remote.status === "connected" && roleRef.current === "sender") {
-        const msg: NoteOnMsg = { type: "noteOn", data: { id, freq: pitch, envelope } };
+        const msg: NoteOnMsg = { type: "noteOn", data: { id, freq: pitch, envelope, velocity: 1 } };
         peerConn.conn.send(msg);
       }
     },
@@ -414,16 +414,10 @@ export default function Play() {
       try {
         if ((msg as SettingsSyncPayload)?.kind === "settings-sync") {
           const parsed = msg as SettingsSyncPayload;
-          setManifestName(parsed.manifestName as keyof typeof manifestPresets);
-          setWaveform(parsed.waveform);
-          setEnvelope(parsed.envelope);
-          setVolumePct(parsed.volumePct);
-          setStartingOctave(parsed.startingOctave);
-          setOctaveCount(parsed.octaveCount);
         } else if ((msg as NoteOnMsg).type === "noteOn") {
           const m = msg as NoteOnMsg;
           setRemotePressedIds((prev) => (prev.includes(m.data.id) ? prev : [...prev, m.data.id]));
-          onIdPress(m.data.id, m.data.freq);
+          onIdPress(m.data.id, m.data.freq, m.data.velocity);
         } else if ((msg as NoteOffMsg).type === "noteOff") {
           const m = msg as NoteOffMsg;
           setRemotePressedIds((prev) => prev.filter((i) => i !== m.data.id));
@@ -443,7 +437,7 @@ export default function Play() {
     setManifestName,
     setWaveform,
     setEnvelope,
-    setVolumePct,
+    setGainPct,
     setStartingOctave,
     setOctaveCount,
     onIdPress,
@@ -459,7 +453,7 @@ export default function Play() {
       manifestName,
       waveform,
       envelope,
-      volumePct,
+      gainPct,
       startingOctave,
       octaveCount,
     };
@@ -469,7 +463,7 @@ export default function Play() {
     manifestName,
     waveform,
     envelope,
-    volumePct,
+    gainPct,
     startingOctave,
     octaveCount,
   ]);
@@ -511,7 +505,7 @@ export default function Play() {
         </A>
 
         <Div display="flex" alignItems="center">
-          <VolumeSlider value={volumePct} onChange={setVolumePct} />
+          <GainSlider value={gainPct} onChange={setGainPct} />
         </Div>
 
         <Button onClick={() => setShowResetConfirm(true)} padding="0.5rem">
