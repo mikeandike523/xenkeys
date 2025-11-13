@@ -1,17 +1,17 @@
+import ConsoleView from "@/components/ConsoleView";
+import useConsoleViewState from "@/hooks/useConsoleViewState";
+import { LuaWorkerClient } from "@/utils/LuaWorkerClient";
+import compile from "@/xenlang/compile";
 import { css } from "@emotion/react";
-import { useRef, useEffect, useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { FaHome } from "react-icons/fa";
 import { A, Button, Div, Header, Main } from "style-props-html";
+import MonacoView from "../components/MonacoView";
+import VolumeSlider from "../components/VolumeSlider";
 import { useElementRefBySelector } from "../hooks/fwk/useElementRefBySelector";
 import { useElementSize } from "../hooks/fwk/useElementSize";
-import useMonacoEditor from "../hooks/useMonacoEditor";
-import MonacoView from "../components/MonacoView";
 import { usePersistentState } from "../hooks/fwk/usePersistentState";
-import VolumeSlider from "../components/VolumeSlider";
-import useConsoleViewState from "@/hooks/useConsoleViewState";
-import ConsoleView from "@/components/ConsoleView";
-import compile from "@/xenlang/compile";
-import { LuaWorkerClient } from "@/utils/LuaWorkerClient";
+import useMonacoEditor from "../hooks/useMonacoEditor";
 
 export default function Compose() {
   const bodyRef = useElementRefBySelector<HTMLBodyElement>("body");
