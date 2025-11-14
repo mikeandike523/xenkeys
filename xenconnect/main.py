@@ -146,6 +146,10 @@ def play_test_sequence(outport: mido.ports.BaseOutput,
 
 # ----------------------------- SOCKET SERVER ----------------------------- #
 
+# -- single-client lock: only allow one authenticated client at a time --
+_first_client_lock = threading.Lock()
+_first_client_addr = None
+
 
 def handle_client(conn: socket.socket,
                   addr,
@@ -171,6 +175,8 @@ def handle_client(conn: socket.socket,
     """
     conn_file = conn.makefile("rwb", buffering=0)
     authed = False if password else True
+    # make first-client address variable global for this handler
+    global _first_client_addr
 
     def send_line(text: str) -> None:
         try:
@@ -179,6 +185,23 @@ def handle_client(conn: socket.socket,
             pass
 
     click.echo(f"[socket] Client connected from {addr}")
+    # enforce single-client: reject if one has already authenticated
+    with _first_client_lock:
+        if _first_client_addr is not None:
+            send_line(
+                f"ERR Server already connected to {_first_client_addr}. "
+                "To reconnect, terminate server with Ctrl+C and restart."
+            )
+            click.echo(
+                f"[socket] Rejecting connection from {addr}; "
+                f"already connected to {_first_client_addr}. "
+                "Use Ctrl+C to restart for a new connection."
+            )
+            try:
+                conn.close()
+            except Exception:
+                pass
+            return
 
     try:
         if password:
@@ -202,6 +225,15 @@ def handle_client(conn: socket.socket,
                         authed = True
                         send_line("OK AUTH")
                         click.echo(f"[socket] Client {addr} authenticated")
+                        # record first authenticated client and inform console
+                        with _first_client_lock:
+                            if _first_client_addr is None:
+                                _first_client_addr = addr
+                                click.echo(
+                                    f"[socket] Connection established with first client {addr}; "
+                                    "no further connections will be allowed. "
+                                    "To reconnect, terminate server with Ctrl+C and restart."
+                                )
                     else:
                         send_line("ERR AUTH")
                         click.echo(f"[socket] Client {addr} failed auth")
