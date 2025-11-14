@@ -474,6 +474,10 @@ export default function Play() {
     octaveCount,
   ]);
 
+  const downloadSurgeXTMappingFiles = ()=>{
+    
+  }
+
   return (
     <>
       <Header
@@ -713,6 +717,7 @@ export default function Play() {
             Download
           </A>
         </Div>
+        <Button onClick={downloadSurgeXTMappingFiles}>Download SurgeXT Mapping Files</Button>
       </Header>
 
       <Main
