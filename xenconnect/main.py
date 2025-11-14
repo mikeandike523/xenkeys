@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
 import time
-import socket
 import threading
-from typing import Sequence, Optional
+from typing import Sequence, Optional, Set
 
 import click
 import mido
+from flask import Flask, request
+from flask_socketio import SocketIO, emit, disconnect
 
 DEFAULT_PORT_NAME = "Python MIDI Generator"
 DEFAULT_SOCKET_PORT = 5072
 
+# ----------------------------- MIDI HELPERS ----------------------------- #
+
 
 def open_midi_port(port_name: Optional[str] = None) -> mido.ports.BaseOutput:
-    """\
-    Open a MIDI output port.
+    """Open a MIDI output port.
 
     On Windows this will typically be a loopMIDI / hardware device.
     On macOS/Linux you can still route to IAC/ALSA virtual cables.
@@ -65,9 +67,7 @@ def send_note_on(outport: mido.ports.BaseOutput,
                  velocity: int = 127,
                  channel: int = 0,
                  lock: Optional[threading.Lock] = None) -> None:
-    """\
-    Send a MIDI Note On message.
-    """
+    """Send a MIDI Note On message."""
     msg = mido.Message(
         "note_on",
         note=note,
@@ -81,14 +81,13 @@ def send_note_on(outport: mido.ports.BaseOutput,
         outport.send(msg)
 
 
+
 def send_note_off(outport: mido.ports.BaseOutput,
                   note: int,
                   velocity: int = 0,
                   channel: int = 0,
                   lock: Optional[threading.Lock] = None) -> None:
-    """\
-    Send a MIDI Note Off message.
-    """
+    """Send a MIDI Note Off message."""
     msg = mido.Message(
         "note_off",
         note=note,
@@ -102,14 +101,14 @@ def send_note_off(outport: mido.ports.BaseOutput,
         outport.send(msg)
 
 
+
 def play_test_sequence(outport: mido.ports.BaseOutput,
                        notes: Sequence[int],
                        bpm: float = 120.0,
                        channel: int = 0,
                        velocity: int = 127,
                        lock: Optional[threading.Lock] = None) -> None:
-    """\
-    Loop over the given MIDI note numbers at the given BPM.
+    """Loop over the given MIDI note numbers at the given BPM.
 
     Each beat:
       - Note On at full velocity
@@ -144,185 +143,267 @@ def play_test_sequence(outport: mido.ports.BaseOutput,
         click.echo("\nStopped test sequence.")
 
 
-# ----------------------------- SOCKET SERVER ----------------------------- #
+# -------------------------- SOCKET.IO SERVER --------------------------- #
 
-# -- single-client lock: only allow one authenticated client at a time --
+app = Flask(__name__)
+# Use default async_mode (eventlet/gevent/threading); you can force one if needed.
+socketio = SocketIO(app, cors_allowed_origins="*")
+
+# MIDI + auth state shared across handlers
+_outport: Optional[mido.ports.BaseOutput] = None
+_midi_lock: Optional[threading.Lock] = None
+_password: Optional[str] = None
+
+# single-client semantics
 _first_client_lock = threading.Lock()
-_first_client_addr = None
+_first_client_sid: Optional[str] = None
+_authed_sids: Set[str] = set()
 
 
-def handle_client(conn: socket.socket,
-                  addr,
-                  outport: mido.ports.BaseOutput,
-                  lock: threading.Lock,
-                  password: Optional[str]) -> None:
-    """\
-    Handle a single client connection.
-
-    Simple line-based protocol (UTF-8, newline-terminated):
-
-        First, if password is set:
-            PASS <password>
-
-        After successful auth:
-            NOTE_ON <note> <velocity> [channel]
-            NOTE_OFF <note> <velocity> [channel]
-            QUIT
-
-    Examples:
-        NOTE_ON 60 127 0
-        NOTE_OFF 60 0 0
-    """
-    conn_file = conn.makefile("rwb", buffering=0)
-    authed = False if password else True
-    # make first-client address variable global for this handler
-    global _first_client_addr
-
-    def send_line(text: str) -> None:
-        try:
-            conn_file.write((text + "\n").encode("utf-8"))
-        except OSError:
-            pass
-
-    click.echo(f"[socket] Client connected from {addr}")
-    # enforce single-client: reject if one has already authenticated
-    with _first_client_lock:
-        if _first_client_addr is not None:
-            send_line(
-                f"ERR Server already connected to {_first_client_addr}. "
-                "To reconnect, terminate server with Ctrl+C and restart."
-            )
-            click.echo(
-                f"[socket] Rejecting connection from {addr}; "
-                f"already connected to {_first_client_addr}. "
-                "Use Ctrl+C to restart for a new connection."
-            )
-            try:
-                conn.close()
-            except Exception:
-                pass
-            return
-
+def _validate_midi_params(data: dict) -> tuple[int, int, int]:
+    """Extract and validate note / velocity / channel from JSON-like payload."""
     try:
-        if password:
-            send_line("WELCOME: send 'PASS <password>' to authenticate")
-        else:
-            send_line("WELCOME: no password required")
+        note = int(data.get("note"))
+        velocity = int(data.get("velocity", 127))
+        channel = int(data.get("channel", 0))
+    except Exception as exc:  # noqa: BLE001 - we want any failure here
+        raise ValueError(f"Invalid numeric parameters: {exc}") from exc
 
-        while True:
-            line_bytes = conn_file.readline()
-            if not line_bytes:
-                break
-            line = line_bytes.decode("utf-8", errors="ignore").strip()
-            if not line:
-                continue
+    if not (0 <= note <= 127):
+        raise ValueError("note out of range (0-127)")
+    if not (0 <= velocity <= 127):
+        raise ValueError("velocity out of range (0-127)")
+    if not (0 <= channel <= 15):
+        raise ValueError("channel out of range (0-15)")
 
-            # Authentication
-            if not authed:
-                parts = line.split(maxsplit=1)
-                if len(parts) == 2 and parts[0].upper() == "PASS":
-                    if parts[1] == password:
-                        authed = True
-                        send_line("OK AUTH")
-                        click.echo(f"[socket] Client {addr} authenticated")
-                        # record first authenticated client and inform console
-                        with _first_client_lock:
-                            if _first_client_addr is None:
-                                _first_client_addr = addr
-                                click.echo(
-                                    f"[socket] Connection established with first client {addr}; "
-                                    "no further connections will be allowed. "
-                                    "To reconnect, terminate server with Ctrl+C and restart."
-                                )
-                    else:
-                        send_line("ERR AUTH")
-                        click.echo(f"[socket] Client {addr} failed auth")
-                        break
-                else:
-                    send_line("ERR Need 'PASS <password>'")
-                continue
-
-            # After auth: handle commands
-            parts = line.split()
-            cmd = parts[0].upper()
-
-            if cmd == "QUIT":
-                send_line("OK BYE")
-                break
-
-            elif cmd in ("NOTE_ON", "NOTE_OFF"):
-                if len(parts) < 3:
-                    send_line("ERR Usage: NOTE_ON <note> <velocity> [channel]")
-                    continue
-                try:
-                    note = int(parts[1])
-                    velocity = int(parts[2])
-                    channel = int(parts[3]) if len(parts) >= 4 else 0
-
-                    if not (0 <= note <= 127):
-                        raise ValueError("note out of range")
-                    if not (0 <= velocity <= 127):
-                        raise ValueError("velocity out of range")
-                    if not (0 <= channel <= 15):
-                        raise ValueError("channel out of range")
-                except Exception as e:
-                    send_line(f"ERR Bad params: {e}")
-                    continue
-
-                if cmd == "NOTE_ON":
-                    send_note_on(outport, note=note, velocity=velocity,
-                                 channel=channel, lock=lock)
-                else:
-                    send_note_off(outport, note=note, velocity=velocity,
-                                  channel=channel, lock=lock)
-
-                send_line("OK")
-            else:
-                send_line("ERR Unknown command")
-
-    except Exception as e:
-        click.echo(f"[socket] Error with client {addr}: {e}")
-    finally:
-        click.echo(f"[socket] Client disconnected {addr}")
-        try:
-            conn_file.close()
-        except Exception:
-            pass
-        try:
-            conn.close()
-        except Exception:
-            pass
+    return note, velocity, channel
 
 
-def start_socket_server(host: str,
-                        port: int,
-                        outport: mido.ports.BaseOutput,
-                        lock: threading.Lock,
-                        password: Optional[str]) -> None:
-    """\
-    Start a simple multi-client TCP server for MIDI events.
-    """
-    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    srv.bind((host, port))
-    srv.listen(5)
+def _require_ready() -> None:
+    if _outport is None:
+        raise RuntimeError("MIDI output port is not initialized on the server.")
 
-    click.echo(f"[socket] Listening on {host}:{port}")
 
-    def accept_loop():
-        while True:
-            try:
-                conn, addr = srv.accept()
-            except OSError:
-                break
-            t = threading.Thread(
-                target=handle_client,
-                args=(conn, addr, outport, lock, password),
-                daemon=True,
+def _require_auth() -> None:
+    """Enforce password + single-client semantics for the current sid."""
+    global _first_client_sid
+
+    sid = request.sid
+
+    # Enforce single authenticated client
+    with _first_client_lock:
+        if _first_client_sid is not None and _first_client_sid != sid:
+            raise PermissionError(
+                "Server is already connected to another client. "
+                "Restart the server to accept a new connection."
             )
-            t.start()
 
-    t = threading.Thread(target=accept_loop, daemon=True)
+    # If no password configured, first connected client is implicitly authed
+    if _password is None:
+        if sid not in _authed_sids:
+            with _first_client_lock:
+                if _first_client_sid is None:
+                    _first_client_sid = sid
+            _authed_sids.add(sid)
+        return
+
+    # Password-protected: must have successfully called 'auth'
+    if sid not in _authed_sids:
+        raise PermissionError("Client is not authenticated. Call 'auth' first.")
+
+
+@socketio.on("connect")
+def handle_connect():  # type: ignore[no-untyped-def]
+    """New client connection.
+
+    We don't fully lock in the client until it authenticates or sends events.
+    If we already have an active client, we reject here.
+    """
+    global _first_client_sid
+
+    sid = request.sid
+    click.echo(f"[socketio] Client connected: {sid}")
+
+    with _first_client_lock:
+        if _first_client_sid is not None and _first_client_sid != sid:
+            # Reject additional clients
+            emit(
+                "error",
+                {
+                    "type": "capacity",
+                    "message": (
+                        "Server already connected to another client. "
+                        "Restart the server to accept a new connection."
+                    ),
+                },
+            )
+            # returning False from a connect handler tells Socket.IO
+            # to reject the connection.
+            return False
+
+    emit(
+        "welcome",
+        {
+            "auth_required": _password is not None,
+            "message": "MIDI Socket.IO server ready.",
+        },
+    )
+
+
+@socketio.on("disconnect")
+def handle_disconnect():  # type: ignore[no-untyped-def]
+    global _first_client_sid
+    sid = request.sid
+    click.echo(f"[socketio] Client disconnected: {sid}")
+
+    _authed_sids.discard(sid)
+    with _first_client_lock:
+        if _first_client_sid == sid:
+            _first_client_sid = None
+
+
+@socketio.on("auth")
+def handle_auth(data):  # type: ignore[no-untyped-def]
+    """Client authentication.
+
+    Payload:
+        {"password": "..."}
+
+    If no password is configured server-side, this is effectively a no-op,
+    but we still acknowledge it.
+    """
+    global _first_client_sid
+
+    sid = request.sid
+    supplied = None if data is None else data.get("password")
+
+    if _password is None:
+        # No password required; mark as authed and possibly first client
+        _authed_sids.add(sid)
+        with _first_client_lock:
+            if _first_client_sid is None:
+                _first_client_sid = sid
+        emit("auth_ok", {"auth_required": False})
+        click.echo(f"[socketio] Client {sid} marked as authenticated (no password).")
+        return
+
+    if supplied == _password:
+        # successful auth
+        with _first_client_lock:
+            if _first_client_sid is None:
+                _first_client_sid = sid
+            elif _first_client_sid != sid:
+                emit(
+                    "auth_error",
+                    {
+                        "message": (
+                            "Server is already connected to another client. "
+                            "Restart the server to accept a new connection."
+                        )
+                    },
+                )
+                disconnect()
+                return
+        _authed_sids.add(sid)
+        emit("auth_ok", {"auth_required": True})
+        click.echo(f"[socketio] Client {sid} authenticated.")
+    else:
+        emit("auth_error", {"message": "Invalid password."})
+        click.echo(f"[socketio] Client {sid} failed authentication.")
+        disconnect()
+
+
+@socketio.on("note_on")
+def handle_note_on(data):  # type: ignore[no-untyped-def]
+    """Handle a 'note_on' event.
+
+    Expected payload (JSON-like dict):
+        {"note": 60, "velocity": 127, "channel": 0}
+    """
+    try:
+        _require_ready()
+        _require_auth()
+        if data is None:
+            raise ValueError("Missing payload body.")
+
+        note, velocity, channel = _validate_midi_params(data)
+        send_note_on(_outport, note=note, velocity=velocity, channel=channel, lock=_midi_lock)
+        emit("ack", {"event": "note_on", "ok": True})
+
+    except PermissionError as exc:
+        emit("error", {"type": "auth", "event": "note_on", "message": str(exc)})
+    except Exception as exc:  # noqa: BLE001
+        emit("error", {"type": "runtime", "event": "note_on", "message": str(exc)})
+
+
+@socketio.on("note_off")
+def handle_note_off(data):  # type: ignore[no-untyped-def]
+    """Handle a 'note_off' event.
+
+    Expected payload (JSON-like dict):
+        {"note": 60, "velocity": 0, "channel": 0}
+    """
+    try:
+        _require_ready()
+        _require_auth()
+        if data is None:
+            raise ValueError("Missing payload body.")
+
+        note, velocity, channel = _validate_midi_params(data)
+        send_note_off(_outport, note=note, velocity=velocity, channel=channel, lock=_midi_lock)
+        emit("ack", {"event": "note_off", "ok": True})
+
+    except PermissionError as exc:
+        emit("error", {"type": "auth", "event": "note_off", "message": str(exc)})
+    except Exception as exc:  # noqa: BLE001
+        emit("error", {"type": "runtime", "event": "note_off", "message": str(exc)})
+
+
+def start_socketio_server(host: str,
+                          port: int,
+                          outport: mido.ports.BaseOutput,
+                          lock: threading.Lock,
+                          password: Optional[str]) -> None:
+    """Start the Socket.IO server for MIDI events in a background thread.
+
+    Exposes these Socket.IO events on the default namespace ('/'):
+
+      - 'welcome' (server -> client)
+          {"auth_required": bool, "message": str}
+
+      - 'auth' (client -> server)
+          {"password": str}
+
+      - 'auth_ok' (server -> client)
+          {"auth_required": bool}
+
+      - 'auth_error' (server -> client)
+          {"message": str}
+
+      - 'note_on' (client -> server)
+          {"note": int, "velocity": int, "channel": int}
+
+      - 'note_off' (client -> server)
+          {"note": int, "velocity": int, "channel": int}
+
+      - 'ack' (server -> client)
+          {"event": "note_on" | "note_off", "ok": true}
+
+      - 'error' (server -> client)
+          {"type": "auth"|"capacity"|"runtime", "event"?: str, "message": str}
+    """
+    global _outport, _midi_lock, _password
+
+    _outport = outport
+    _midi_lock = lock
+    _password = password
+
+    def run_server() -> None:
+        click.echo(f"[socketio] Listening on http://{host}:{port} (Socket.IO)")
+        # debug=False and use_reloader=False so it plays nicely with CLI tools
+        socketio.run(app, host=host, port=port, debug=False, use_reloader=False)
+
+    t = threading.Thread(target=run_server, daemon=True)
     t.start()
 
 
@@ -382,19 +463,19 @@ def start_socket_server(host: str,
     default=DEFAULT_SOCKET_PORT,
     show_default=True,
     type=int,
-    help="TCP port for the MIDI command socket server.",
+    help="TCP port for the Socket.IO MIDI server.",
 )
 @click.option(
     "--socket-host",
     default="127.0.0.1",
     show_default=True,
-    help="Host/IP address on which to bind the socket server.",
+    help="Host/IP address on which to bind the Socket.IO server.",
 )
 @click.option(
     "--password",
     default=None,
     help=(
-        "Password required for socket clients (sent as 'PASS <password>'). "
+        "Password required for Socket.IO clients (sent via 'auth' event). "
         "If omitted, no authentication is required."
     ),
 )
@@ -407,16 +488,32 @@ def main(port_name,
          socket_port,
          socket_host,
          password):
-    """\
-    Create a virtual MIDI device, optionally play a test sequence,
-    and start a socket server for remote MIDI events.
+    """Create a virtual MIDI device, optionally play a test sequence,
+    and start a Socket.IO server for remote MIDI events.
 
-    Socket protocol (TCP, line-based):
+    Socket.IO protocol (JSON-like events, default namespace '/'): 
 
-        PASS <password>          # only if a password is configured
-        NOTE_ON <note> <velocity> [channel]
-        NOTE_OFF <note> <velocity> [channel]
-        QUIT
+      - Client connects (built-in 'connect' event)
+      - Server emits 'welcome':
+
+            {"auth_required": bool, "message": str}
+
+      - If a password is configured, client must emit 'auth':
+
+            socket.emit('auth', { password: 'your-password' })
+
+      - Sending notes:
+
+            socket.emit('note_on', { note: 60, velocity: 127, channel: 0 })
+            socket.emit('note_off', { note: 60, velocity: 0,   channel: 0 })
+
+      - On success, server emits 'ack':
+
+            {"event": "note_on" | "note_off", "ok": true}
+
+      - On error, server emits 'error':
+
+            {"type": "auth"|"capacity"|"runtime", "event"?: str, "message": str}
     """
     # List MIDI ports and exit if requested
     if list_ports:
@@ -438,8 +535,8 @@ def main(port_name,
 
     midi_lock = threading.Lock()
 
-    # Start socket server
-    start_socket_server(socket_host, socket_port, outport, midi_lock, password)
+    # Start Socket.IO server
+    start_socketio_server(socket_host, socket_port, outport, midi_lock, password)
 
     # If a test sequence is specified, run it in the foreground
     if test_seq:
@@ -455,7 +552,7 @@ def main(port_name,
     else:
         click.echo(
             "No test sequence provided. "
-            "Virtual MIDI port and socket server will stay active. "
+            "Virtual MIDI port and Socket.IO server will stay active. "
             "Press Ctrl+C to exit."
         )
         try:
