@@ -145,6 +145,15 @@ export default function Play() {
     null
   );
 
+  // For DAW-based connection (a seperate feature)
+  const [showXenConnectDialog, setShowXenConnectDialog] = useState(false);
+  const [xenConnectHost, setXenConnectHost] = useState(""); // Host or IP address
+  const [xenConnectPortText, setXenConnectPortText] = useState("5072"); // Use text that will be a port later
+  const [xenConnectPassword, setXenConnectPassword] = useState(""); // Use text that will be a password later
+  const [xenConnectState, setXenConnectState] = useState<"idle" | "connecting" | "connected" | "error">("idle");
+  const [xenConnectError, setXenConnectError] = useState<string | null>(null);
+
+
   useEffect(() => {
     if (synth) synth.setVolume(volumePct / 100);
   }, [synth, volumePct]);
