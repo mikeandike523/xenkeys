@@ -3,7 +3,7 @@ import {
   useEffect,
   useRef,
   useState,
-  type ChangeEvent
+  type ChangeEvent,
 } from "react";
 import { FaHome } from "react-icons/fa";
 import {
@@ -36,7 +36,11 @@ import { make36EDO } from "../data/edo-presets/36edo";
 import { make41EDO } from "../data/edo-presets/41edo";
 import { make48EDO } from "../data/edo-presets/48edo";
 import { whiteKeyAspect } from "../data/piano-key-dimensions";
-import { createReceiverPeer, createSenderPeer, type PeerConn } from "../remote/peer";
+import {
+  createReceiverPeer,
+  createSenderPeer,
+  type PeerConn,
+} from "../remote/peer";
 import type {
   Envelope,
   NoteOffMsg,
@@ -44,6 +48,7 @@ import type {
   Waveform,
 } from "../shared-types/audio-engine";
 import type { SettingsSyncPayload } from "../shared-types/remote";
+import createSurgeXTMappingFiles from "@/utils/music-theory/createSurgeXTMappingFiles";
 
 const default12EdoManifest = make12EDO();
 const default19EdoManifest = make19EDO();
@@ -132,12 +137,13 @@ export default function Play() {
   // PeerJS P2P connection reference
   const peerRef = useRef<PeerConn | null>(null);
 
-
   const roleRef = useRef<"sender" | "receiver" | "peer">("peer");
 
   // UI state for join-code flow
   const [senderJoinCode, setSenderJoinCode] = useState("");
-  const [receiverInviteCode, setReceiverInviteCode] = useState<string | null>(null);
+  const [receiverInviteCode, setReceiverInviteCode] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
     if (synth) synth.setVolume(volumePct / 100);
@@ -173,7 +179,6 @@ export default function Play() {
   useEffect(() => {
     if (synth) synth.setEnvelope(envelope);
   }, [synth, envelope]);
-
 
   // Utility: hard reset playhead & reload the element to avoid scrubber glitches
   const resetPlayhead = useCallback(() => {
@@ -294,8 +299,15 @@ export default function Play() {
       }
       // Remote sender: send note-on via PeerJS data channel
       const peerConn = peerRef.current;
-      if (peerConn && remote.status === "connected" && roleRef.current === "sender") {
-        const msg: NoteOnMsg = { type: "noteOn", data: { id, freq: pitch, envelope } };
+      if (
+        peerConn &&
+        remote.status === "connected" &&
+        roleRef.current === "sender"
+      ) {
+        const msg: NoteOnMsg = {
+          type: "noteOn",
+          data: { id, freq: pitch, envelope },
+        };
         peerConn.conn.send(msg);
       }
     },
@@ -310,7 +322,11 @@ export default function Play() {
       }
       // Remote sender: send note-off via PeerJS data channel
       const peerConn = peerRef.current;
-      if (peerConn && remote.status === "connected" && roleRef.current === "sender") {
+      if (
+        peerConn &&
+        remote.status === "connected" &&
+        roleRef.current === "sender"
+      ) {
         const msg: NoteOffMsg = { type: "noteOff", data: { id } };
         peerConn.conn.send(msg);
       }
@@ -374,7 +390,10 @@ export default function Play() {
       }
       setRemote({ status: "connected", errorMessage: null });
     } catch (err: any) {
-      setRemote({ status: "error", errorMessage: err?.message || "Remote play connection failed." });
+      setRemote({
+        status: "error",
+        errorMessage: err?.message || "Remote play connection failed.",
+      });
     }
   }, [generateInviteCode, senderJoinCode]);
 
@@ -408,7 +427,12 @@ export default function Play() {
   // Receiver-only listener attachment via PeerJS data channel
   useEffect(() => {
     const peerConn = peerRef.current;
-    if (!peerConn || remote.status !== "connected" || roleRef.current !== "receiver") return;
+    if (
+      !peerConn ||
+      remote.status !== "connected" ||
+      roleRef.current !== "receiver"
+    )
+      return;
 
     const onData = (msg: any) => {
       try {
@@ -422,7 +446,9 @@ export default function Play() {
           setOctaveCount(parsed.octaveCount);
         } else if ((msg as NoteOnMsg).type === "noteOn") {
           const m = msg as NoteOnMsg;
-          setRemotePressedIds((prev) => (prev.includes(m.data.id) ? prev : [...prev, m.data.id]));
+          setRemotePressedIds((prev) =>
+            prev.includes(m.data.id) ? prev : [...prev, m.data.id]
+          );
           onIdPress(m.data.id, m.data.freq);
         } else if ((msg as NoteOffMsg).type === "noteOff") {
           const m = msg as NoteOffMsg;
@@ -453,7 +479,12 @@ export default function Play() {
   // Sender-only settings sync via PeerJS
   useEffect(() => {
     const peerConn = peerRef.current;
-    if (!peerConn || remote.status !== "connected" || roleRef.current !== "sender") return;
+    if (
+      !peerConn ||
+      remote.status !== "connected" ||
+      roleRef.current !== "sender"
+    )
+      return;
     const payload: SettingsSyncPayload = {
       kind: "settings-sync",
       manifestName,
@@ -474,9 +505,30 @@ export default function Play() {
     octaveCount,
   ]);
 
-  const downloadSurgeXTMappingFiles = ()=>{
-    
-  }
+  const downloadSurgeXTMappingFiles = () => {
+    const mappingFiles = createSurgeXTMappingFiles(
+      manifest.totalEDO,
+      manifest.C4Frequency,
+      startingOctave,
+      octaveCount
+    );
+
+    for (const [key, value] of Object.entries(mappingFiles)) {
+      const extension = key; // "scl" or "kbm"
+      const blob = new Blob([value], { type: "text/plain" });
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${manifest.totalEDO}.${manifest.C4Frequency}.${startingOctave}.${octaveCount}.${extension}`;
+
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      URL.revokeObjectURL(url);
+    }
+  };
 
   return (
     <>
@@ -717,7 +769,9 @@ export default function Play() {
             Download
           </A>
         </Div>
-        <Button onClick={downloadSurgeXTMappingFiles}>Download SurgeXT Mapping Files</Button>
+        <Button onClick={downloadSurgeXTMappingFiles}>
+          Download SurgeXT Mapping Files
+        </Button>
       </Header>
 
       <Main
@@ -842,7 +896,9 @@ export default function Play() {
                   <Div display="flex" flexDirection="column" gap="0.5rem">
                     {receiverInviteCode ? (
                       <>
-                        <Span><strong>Share this code:</strong> {receiverInviteCode}</Span>
+                        <Span>
+                          <strong>Share this code:</strong> {receiverInviteCode}
+                        </Span>
                         <Span>Waiting for sender to connect…</Span>
                       </>
                     ) : (
@@ -860,7 +916,9 @@ export default function Play() {
                         autoComplete="off"
                         autoCorrect="off"
                         value={senderJoinCode}
-                        onChange={(e) => setSenderJoinCode(e.target.value.toUpperCase())}
+                        onChange={(e) =>
+                          setSenderJoinCode(e.target.value.toUpperCase())
+                        }
                         placeholder="6 letters/digits"
                       />
                     </label>
@@ -886,7 +944,9 @@ export default function Play() {
                 </Span>
                 <Div display="flex" flexDirection="column" gap="0.25rem">
                   {roleRef.current === "receiver" && (
-                    <Span><strong>Invite Code:</strong> {receiverInviteCode}</Span>
+                    <Span>
+                      <strong>Invite Code:</strong> {receiverInviteCode}
+                    </Span>
                   )}
                 </Div>
                 <Button background="#eee" onClick={turnRemoteOff}>
