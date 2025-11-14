@@ -11,15 +11,53 @@ DEFAULT_PORT_NAME = "Python MIDI Generator"
 DEFAULT_SOCKET_PORT = 5072
 
 
-def open_virtual_port(port_name: str = DEFAULT_PORT_NAME) -> mido.ports.BaseOutput:
+def open_midi_port(port_name: Optional[str] = None) -> mido.ports.BaseOutput:
     """\
-    Open a virtual MIDI output port that DAWs can see as an input device.
+    Open a MIDI output port.
+
+    On Windows this will typically be a loopMIDI / hardware device.
+    On macOS/Linux you can still route to IAC/ALSA virtual cables.
+
+    If ``port_name`` is given, we first try an exact match. If that fails,
+    we look for the first port whose *name starts with* ``port_name``.
+    This is useful for drivers that append an index (e.g. "Foo 1").
     """
-    try:
-        outport = mido.open_output(port_name, virtual=True)
-    except TypeError:
-        outport = mido.open_output(port_name)
-    return outport
+    outputs = mido.get_output_names()
+
+    if not outputs:
+        raise RuntimeError("No MIDI output ports available.")
+
+    if port_name:
+        # 1) Try to find an exact match
+        for name in outputs:
+            if name == port_name:
+                return mido.open_output(name)
+
+        # 2) Fall back to prefix match (case-insensitive)
+        prefix_matches = [
+            name for name in outputs
+            if name.lower().startswith(port_name.lower())
+        ]
+        if prefix_matches:
+            chosen = prefix_matches[0]
+            click.echo(
+                f"Requested MIDI output '{port_name}' not found exactly; "
+                f"using first prefix match: '{chosen}'"
+            )
+            return mido.open_output(chosen)
+
+        # 3) Nothing matched at all
+        raise RuntimeError(
+            f"MIDI output '{port_name}' not found (no exact or prefix match).\n"\
+            f"Available outputs:\n" + "\n".join(outputs)
+        )
+
+    # No explicit name: just use the first one
+    click.echo("No --port-name provided, using first available MIDI output:")
+    for i, name in enumerate(outputs):
+        click.echo(f"  [{i}] {name}")
+    return mido.open_output(outputs[0])
+
 
 
 def send_note_on(outport: mido.ports.BaseOutput,
@@ -263,9 +301,17 @@ def start_socket_server(host: str,
 @click.option(
     "--port-name",
     "-p",
-    default=DEFAULT_PORT_NAME,
-    show_default=True,
-    help="Name of the virtual MIDI output port.",
+    default=None,
+    help=(
+        "Name or prefix of the MIDI output port to use "
+        "(e.g. 'Python MIDI Generator'). "
+        "If omitted, the first available output port is used."
+    ),
+)
+@click.option(
+    "--list-ports",
+    is_flag=True,
+    help="List available MIDI output ports and exit.",
 )
 @click.option(
     "--bpm",
@@ -315,10 +361,13 @@ def start_socket_server(host: str,
 @click.option(
     "--password",
     default=None,
-    help="Password required for socket clients (sent as 'PASS <password>'). "
-         "If omitted, no authentication is required.",
+    help=(
+        "Password required for socket clients (sent as 'PASS <password>'). "
+        "If omitted, no authentication is required."
+    ),
 )
 def main(port_name,
+         list_ports,
          bpm,
          channel,
          velocity,
@@ -337,8 +386,19 @@ def main(port_name,
         NOTE_OFF <note> <velocity> [channel]
         QUIT
     """
-    outport = open_virtual_port(port_name)
-    click.echo(f"Opened virtual MIDI output port: '{outport.name}'")
+    # List MIDI ports and exit if requested
+    if list_ports:
+        outputs = mido.get_output_names()
+        if not outputs:
+            click.echo("No MIDI output ports available.")
+        else:
+            click.echo("Available MIDI output ports:")
+            for i, name in enumerate(outputs):
+                click.echo(f"  [{i}] {name}")
+        return
+
+    outport = open_midi_port(port_name)
+    click.echo(f"Opened MIDI output port: '{outport.name}'")
     click.echo(
         "In your DAW (e.g. Reaper), choose this as a MIDI input device "
         "for a track to receive events."
