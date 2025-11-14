@@ -25,3 +25,7 @@ dist-ssr
 
 # cs4ai output
 codebase-dump.txt
+
+.venv
+__pycache__
+**/__pycache__
