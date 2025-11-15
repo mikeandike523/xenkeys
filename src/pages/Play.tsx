@@ -22,6 +22,7 @@ import { useElementSize } from "../hooks/fwk/useElementSize";
 import { usePersistentState } from "../hooks/fwk/usePersistentState";
 
 import { css } from "@emotion/react";
+import { io, type Socket } from "socket.io-client";
 import Recorder, { type Recording } from "../audio/recorder";
 import Synth from "../audio/synth";
 import CanvasKeyboard from "../components/CanvasKeyboard";
@@ -145,13 +146,16 @@ export default function Play() {
     null
   );
 
-  // For DAW-based connection (a seperate feature)
+  // For DAW-based connection (a separate feature)
   const [showXenConnectDialog, setShowXenConnectDialog] = useState(false);
-  const [xenConnectHost, setXenConnectHost] = useState(""); // Host or IP address
+  const [xenConnectHost, setXenConnectHost] = useState("localhost"); // Host or IP address (default localhost)
   const [xenConnectPortText, setXenConnectPortText] = useState("5072"); // Use text that will be a port later
   const [xenConnectPassword, setXenConnectPassword] = useState(""); // Use text that will be a password later
-  const [xenConnectState, setXenConnectState] = useState<"idle" | "connecting" | "connected" | "error">("idle");
+  const [xenConnectState, setXenConnectState] = useState<
+    "idle" | "connecting" | "connected" | "error"
+  >("idle");
   const [xenConnectError, setXenConnectError] = useState<string | null>(null);
+  const xenSocketRef = useRef<Socket | null>(null);
 
 
   useEffect(() => {
@@ -319,8 +323,13 @@ export default function Play() {
         };
         peerConn.conn.send(msg);
       }
+      // DAW/XenConnect: send MIDI note-on
+      if (xenConnectState === "connected" && xenSocketRef.current) {
+        const midi = id - startingOctave * manifest.totalEDO;
+        xenSocketRef.current.emit("noteOn", { midi });
+      }
     },
-    [synth, envelope, remote.status]
+    [synth, envelope, remote.status, xenConnectState, startingOctave, manifest.totalEDO]
   );
 
   const onIdRelease = useCallback(
@@ -339,8 +348,13 @@ export default function Play() {
         const msg: NoteOffMsg = { type: "noteOff", data: { id } };
         peerConn.conn.send(msg);
       }
+      // DAW/XenConnect: send MIDI note-off
+      if (xenConnectState === "connected" && xenSocketRef.current) {
+        const midi = id - startingOctave * manifest.totalEDO;
+        xenSocketRef.current.emit("noteOff", { midi });
+      }
     },
-    [synth, remote.status]
+    [synth, remote.status, xenConnectState, startingOctave, manifest.totalEDO]
   );
 
   const handleStart = useCallback(async () => {
@@ -381,6 +395,56 @@ export default function Play() {
 
   const openRemoteDialog = useCallback(() => setShowRemoteDialog(true), []);
   const closeRemoteDialog = useCallback(() => setShowRemoteDialog(false), []);
+
+  const openXenConnectDialog = useCallback(() => setShowXenConnectDialog(true), []);
+  const closeXenConnectDialog = useCallback(() => {
+    if (xenSocketRef.current) {
+      xenSocketRef.current.disconnect();
+      xenSocketRef.current = null;
+    }
+    setShowXenConnectDialog(false);
+    setXenConnectState("idle");
+    setXenConnectError(null);
+  }, []);
+
+  const connectXen = useCallback(() => {
+    setXenConnectState("connecting");
+    setXenConnectError(null);
+    const port = parseInt(xenConnectPortText, 10);
+    if (isNaN(port) || port < 0 || port > 65535) {
+      setXenConnectState("error");
+      setXenConnectError("Invalid port");
+      return;
+    }
+    try {
+      const socket = io(`http://${xenConnectHost}:${port}`, {
+        auth: { password: xenConnectPassword },
+      });
+      xenSocketRef.current = socket;
+      socket.on("connect", () => {
+        setXenConnectState("connected");
+      });
+      socket.on("connect_error", (err: any) => {
+        setXenConnectState("error");
+        setXenConnectError(err?.message || String(err));
+      });
+      socket.on("disconnect", () => {
+        setXenConnectState("idle");
+      });
+    } catch (err: any) {
+      setXenConnectState("error");
+      setXenConnectError(err?.message || String(err));
+    }
+  }, [xenConnectHost, xenConnectPortText, xenConnectPassword]);
+
+  const disconnectXen = useCallback(() => {
+    if (xenSocketRef.current) {
+      xenSocketRef.current.disconnect();
+      xenSocketRef.current = null;
+    }
+    setXenConnectState("idle");
+    setXenConnectError(null);
+  }, []);
 
   const beginRemoteHandshake = useCallback(async () => {
     try {
@@ -586,6 +650,9 @@ export default function Play() {
         {/* --- New: Set up Remote Play button --- */}
         <Button onClick={openRemoteDialog} padding="0.5rem">
           Set up remote play
+        </Button>
+        <Button onClick={openXenConnectDialog} padding="0.5rem">
+          XenConnect
         </Button>
 
         <Select
@@ -984,6 +1051,93 @@ export default function Play() {
                   <Button onClick={beginRemoteHandshake}>Retry</Button>
                   <Button background="#eee" onClick={turnRemoteOff}>
                     Turn off
+                  </Button>
+                </Div>
+              </>
+            )}
+          </Div>
+        </div>
+      )}
+      {/* --- XenConnect dialog --- */}
+      {showXenConnectDialog && (
+        <div className="audio-modal" role="dialog" aria-modal="true">
+          <Div
+            background="white"
+            padding="1.5rem"
+            borderRadius="0.5rem"
+            display="flex"
+            flexDirection="column"
+            gap="0.75rem"
+            minWidth="20rem"
+            maxWidth="28rem"
+          >
+            <Div display="flex" justifyContent="space-between" alignItems="center">
+              <Span style={{ fontWeight: 700 }}>XenConnect</Span>
+              <Button onClick={closeXenConnectDialog}>Close</Button>
+            </Div>
+            {xenConnectState === "idle" && (
+              <>
+                <label>
+                  Host:&nbsp;
+                  <input
+                    value={xenConnectHost}
+                    onChange={(e) => setXenConnectHost(e.target.value)}
+                    placeholder="localhost"
+                  />
+                </label>
+                <label>
+                  Port:&nbsp;
+                  <input
+                    value={xenConnectPortText}
+                    onChange={(e) => setXenConnectPortText(e.target.value)}
+                    placeholder="5072"
+                  />
+                </label>
+                <label>
+                  Password:&nbsp;
+                  <input
+                    type="password"
+                    value={xenConnectPassword}
+                    onChange={(e) => setXenConnectPassword(e.target.value)}
+                  />
+                </label>
+                <Div display="flex" gap="0.5rem">
+                  <Button onClick={connectXen}>Connect</Button>
+                  <Button background="#eee" onClick={closeXenConnectDialog}>
+                    Cancel
+                  </Button>
+                </Div>
+              </>
+            )}
+            {xenConnectState === "connecting" && (
+              <>
+                <Span>
+                  Connecting to {xenConnectHost}:{xenConnectPortText}…
+                </Span>
+                <Button background="#eee" onClick={disconnectXen}>
+                  Cancel
+                </Button>
+              </>
+            )}
+            {xenConnectState === "connected" && (
+              <>
+                <Span style={{ fontWeight: 600 }}>Connected</Span>
+
+                <Div display="flex" gap="0.5rem">
+                  <Button onClick={disconnectXen}>Disconnect</Button>
+                  <Button onClick={closeXenConnectDialog}>Close</Button>
+                </Div>
+              </>
+            )}
+            {xenConnectState === "error" && (
+              <>
+                <Span style={{ color: "#b00020" }}>
+                  {xenConnectError || "Connection error."}
+                </Span>
+                <Div display="flex" gap="0.5rem">
+                  <Button onClick={connectXen}>Retry</Button>
+                  <Button background="#eee" onClick={closeXenConnectDialog}>
+                    Close
                   </Button>
                 </Div>
               </>
