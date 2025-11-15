@@ -214,7 +214,7 @@ def _require_auth() -> None:
 
 
 @socketio.on("connect")
-def handle_connect():  # type: ignore[no-untyped-def]
+def handle_connect(auth):  # type: ignore[no-untyped-def]
     """New client connection.
 
     We don't fully lock in the client until it authenticates or sends events.
@@ -224,6 +224,18 @@ def handle_connect():  # type: ignore[no-untyped-def]
 
     sid = request.sid
     click.echo(f"[socketio] Client connected: {sid}")
+
+    # Handshake authentication using client-supplied auth payload
+    if _password is not None:
+        supplied = auth.get("password") if auth else None
+        if supplied != _password:
+            click.echo(f"[socketio] Client {sid} failed authentication during connect.")
+            return False
+        # Successful handshake auth: mark as authenticated and lock client
+        _authed_sids.add(sid)
+        with _first_client_lock:
+            if _first_client_sid is None:
+                _first_client_sid = sid
 
     with _first_client_lock:
         if _first_client_sid is not None and _first_client_sid != sid:
@@ -314,6 +326,7 @@ def handle_auth(data):  # type: ignore[no-untyped-def]
         disconnect()
 
 
+@socketio.on("noteOn")
 @socketio.on("note_on")
 def handle_note_on(data):  # type: ignore[no-untyped-def]
     """Handle a 'note_on' event.
@@ -329,6 +342,10 @@ def handle_note_on(data):  # type: ignore[no-untyped-def]
         if data is None:
             raise ValueError("Missing payload body.")
 
+        # Normalize payload: support 'midi' key from camelCase client
+        if "midi" in data and "note" not in data:
+            data = {**data, "note": data["midi"]}
+
         note, velocity, channel = _validate_midi_params(data)
         send_note_on(_outport, note=note, velocity=velocity, channel=channel, lock=_midi_lock)
         emit("ack", {"event": "note_on", "ok": True})
@@ -339,6 +356,7 @@ def handle_note_on(data):  # type: ignore[no-untyped-def]
         emit("error", {"type": "runtime", "event": "note_on", "message": str(exc)})
 
 
+@socketio.on("noteOff")
 @socketio.on("note_off")
 def handle_note_off(data):  # type: ignore[no-untyped-def]
     """Handle a 'note_off' event.
@@ -353,6 +371,10 @@ def handle_note_off(data):  # type: ignore[no-untyped-def]
         _require_auth()
         if data is None:
             raise ValueError("Missing payload body.")
+
+        # Normalize payload: support 'midi' key from camelCase client
+        if "midi" in data and "note" not in data:
+            data = {**data, "note": data["midi"]}
 
         note, velocity, channel = _validate_midi_params(data)
         send_note_off(_outport, note=note, velocity=velocity, channel=channel, lock=_midi_lock)
@@ -512,9 +534,9 @@ def main(port_name,
 
             {"auth_required": bool, "message": str}
 
-      - If a password is configured, client must emit 'auth':
+      - If a password is configured, client must supply it in the connection auth payload:
 
-            socket.emit('auth', { password: 'your-password' })
+            const socket = io(url, { auth: { password: 'your-password' } })
 
       - Sending notes:
 
