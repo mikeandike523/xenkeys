@@ -162,6 +162,16 @@ export default function Play() {
     if (synth) synth.setVolume(volumePct / 100);
   }, [synth, volumePct]);
 
+  // Mute or resume synth audio when connecting/disconnecting XenConnect
+  useEffect(() => {
+    if (!synth) return;
+    if (xenConnectState === "connected") {
+      synth.suspend();
+    } else if (started) {
+      synth.resume();
+    }
+  }, [synth, xenConnectState, started]);
+
   // Init synth + recorder exactly once
   useEffect(() => {
     let mounted = true;
@@ -398,13 +408,7 @@ export default function Play() {
 
   const openXenConnectDialog = useCallback(() => setShowXenConnectDialog(true), []);
   const closeXenConnectDialog = useCallback(() => {
-    if (xenSocketRef.current) {
-      xenSocketRef.current.disconnect();
-      xenSocketRef.current = null;
-    }
     setShowXenConnectDialog(false);
-    setXenConnectState("idle");
-    setXenConnectError(null);
   }, []);
 
   const connectXen = useCallback(() => {

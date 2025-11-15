@@ -36,6 +36,14 @@ export default class Synth {
       await this.context.resume();
     }
   }
+  /**
+   * Suspend audio context to mute synth output.
+   */
+  async suspend(): Promise<void> {
+    if (this.context.state === "running") {
+      await this.context.suspend();
+    }
+  }
 
   noteOn(id: number, freq: number, envelope: Envelope): void {
     const msg: PitchSynthMessage = { type: "noteOn", data: { id, freq, envelope } };
