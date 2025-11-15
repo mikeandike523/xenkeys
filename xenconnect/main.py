@@ -153,6 +153,7 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 _outport: Optional[mido.ports.BaseOutput] = None
 _midi_lock: Optional[threading.Lock] = None
 _password: Optional[str] = None
+_debug: bool = False
 
 # single-client semantics
 _first_client_lock = threading.Lock()
@@ -321,6 +322,8 @@ def handle_note_on(data):  # type: ignore[no-untyped-def]
         {"note": 60, "velocity": 127, "channel": 0}
     """
     try:
+        if _debug:
+            click.echo(f"[socketio][debug] note_on event payload: {data}")
         _require_ready()
         _require_auth()
         if data is None:
@@ -344,6 +347,8 @@ def handle_note_off(data):  # type: ignore[no-untyped-def]
         {"note": 60, "velocity": 0, "channel": 0}
     """
     try:
+        if _debug:
+            click.echo(f"[socketio][debug] note_off event payload: {data}")
         _require_ready()
         _require_auth()
         if data is None:
@@ -363,7 +368,8 @@ def start_socketio_server(host: str,
                           port: int,
                           outport: mido.ports.BaseOutput,
                           lock: threading.Lock,
-                          password: Optional[str]) -> None:
+                          password: Optional[str],
+                          debug: bool) -> None:
     """Start the Socket.IO server for MIDI events in a background thread.
 
     Exposes these Socket.IO events on the default namespace ('/'):
@@ -397,6 +403,8 @@ def start_socketio_server(host: str,
     _outport = outport
     _midi_lock = lock
     _password = password
+    global _debug
+    _debug = debug
 
     def run_server() -> None:
         click.echo(f"[socketio] Listening on http://{host}:{port} (Socket.IO)")
@@ -479,6 +487,11 @@ def start_socketio_server(host: str,
         "If omitted, no authentication is required."
     ),
 )
+@click.option(
+    "--debug",
+    is_flag=True,
+    help="Print incoming Socket.IO events to console for debugging.",
+)
 def main(port_name,
          list_ports,
          bpm,
@@ -487,7 +500,8 @@ def main(port_name,
          test_seq,
          socket_port,
          socket_host,
-         password):
+         password,
+         debug):
     """Create a virtual MIDI device, optionally play a test sequence,
     and start a Socket.IO server for remote MIDI events.
 
@@ -536,7 +550,14 @@ def main(port_name,
     midi_lock = threading.Lock()
 
     # Start Socket.IO server
-    start_socketio_server(socket_host, socket_port, outport, midi_lock, password)
+    start_socketio_server(
+        socket_host,
+        socket_port,
+        outport,
+        midi_lock,
+        password,
+        debug,
+    )
 
     # If a test sequence is specified, run it in the foreground
     if test_seq:

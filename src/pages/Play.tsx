@@ -305,8 +305,8 @@ export default function Play() {
 
   const onIdPress = useCallback(
     (id: number, pitch: number) => {
-      // local playback unless acting as remote sender
-      if (!(remote.status === "connected" && roleRef.current === "sender")) {
+      // local playback unless acting as remote sender or via XenConnect
+      if (!((remote.status === "connected" && roleRef.current === "sender") || xenConnectState === "connected")) {
         synth?.resume();
         synth?.noteOn(id, pitch, envelope);
       }
@@ -334,8 +334,8 @@ export default function Play() {
 
   const onIdRelease = useCallback(
     (id: number) => {
-      // local stop unless acting as remote sender
-      if (!(remote.status === "connected" && roleRef.current === "sender")) {
+      // local stop unless acting as remote sender or via XenConnect
+      if (!((remote.status === "connected" && roleRef.current === "sender") || xenConnectState === "connected")) {
         synth?.noteOff(id);
       }
       // Remote sender: send note-off via PeerJS data channel
