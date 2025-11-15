@@ -7,9 +7,31 @@ import click
 import mido
 from flask import Flask, request
 from flask_socketio import SocketIO, emit, disconnect
+import socket
 
 DEFAULT_PORT_NAME = "Python MIDI Generator"
 DEFAULT_SOCKET_PORT = 5072
+
+def _get_lan_ips() -> list[str]:
+    """Return non-loopback IPv4 addresses of this machine."""
+    ips: set[str] = set()
+    # Primary interface via UDP trick
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ips.add(s.getsockname()[0])
+        s.close()
+    except Exception:
+        pass
+    # Also include addresses from hostname resolution
+    try:
+        hostname = socket.gethostname()
+        for info in socket.getaddrinfo(hostname, None, family=socket.AF_INET):
+            ips.add(info[4][0])
+    except Exception:
+        pass
+    # Filter out loopback addresses
+    return [ip for ip in sorted(ips) if not ip.startswith("127.")]
 
 # ----------------------------- MIDI HELPERS ----------------------------- #
 
@@ -429,7 +451,16 @@ def start_socketio_server(host: str,
     _debug = debug
 
     def run_server() -> None:
-        click.echo(f"[socketio] Listening on http://{host}:{port} (Socket.IO)")
+        # Report listening addresses: if bound to all interfaces, list LAN IPs
+        if host in ("0.0.0.0", ""):
+            ips = _get_lan_ips()
+            if ips:
+                for ip in ips:
+                    click.echo(f"[socketio] Listening on http://{ip}:{port} (Socket.IO)")
+            else:
+                click.echo(f"[socketio] Listening on http://{host}:{port} (Socket.IO)")
+        else:
+            click.echo(f"[socketio] Listening on http://{host}:{port} (Socket.IO)")
         # debug=False and use_reloader=False so it plays nicely with CLI tools
         socketio.run(app, host=host, port=port, debug=False, use_reloader=False)
 
@@ -497,9 +528,12 @@ def start_socketio_server(host: str,
 )
 @click.option(
     "--socket-host",
-    default="127.0.0.1",
+    default="0.0.0.0",
     show_default=True,
-    help="Host/IP address on which to bind the Socket.IO server.",
+    help=(
+        "Host/IP address on which to bind the Socket.IO server. "
+        "Use 0.0.0.0 to listen on all interfaces."
+    ),
 )
 @click.option(
     "--password",
