@@ -305,6 +305,8 @@ export default function Play() {
 
   const manifest = manifestPresets[manifestName];
 
+  console.log(manifest.noteNames)
+
   const playAreaSize = useElementSize(playAreaRef);
   const currentPlayAreaWidth = playAreaSize?.width || 0;
   const currentPlayAreaHeight = playAreaSize?.height || 0;

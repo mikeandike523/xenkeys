@@ -61,4 +61,5 @@ export default interface XenOctaveDisplayManifest {
     keyDeclarations: Array<KeyDeclaration>
     totalEDO: number
     C4Frequency: number
+    noteNames?: string[]
 }

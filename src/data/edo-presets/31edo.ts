@@ -5,8 +5,33 @@ import type {
 } from "../../types/XenOctaveDisplayManifest";
 
 import getBaseFrequencyC from "../../utils/music-theory/getBaseFrequency";
-import { blackToWhiteWidthRatio, blackToWhiteLengthRatio, purpleToBlackWidthRatio, purpleToBlackLengthRatio } from "../piano-key-dimensions";
-import { defaultWhiteKeyAppearance, defaultBlackKeyAppearance, defaultPurpleKeyAppearance } from "../color-presets";
+import {
+  blackToWhiteWidthRatio,
+  blackToWhiteLengthRatio,
+  purpleToBlackWidthRatio,
+  purpleToBlackLengthRatio,
+} from "../piano-key-dimensions";
+import {
+  defaultWhiteKeyAppearance,
+  defaultBlackKeyAppearance,
+  defaultPurpleKeyAppearance,
+} from "../color-presets";
+import makeSuffixCycle from "@/utils/algorithms/makeSuffixCycle";
+
+const noteNames = makeSuffixCycle([
+  ["C", [""]],
+  ["C#", ["v", "", "^", "^^"]],
+  ["D", [""]],
+  ["D#", ["v", "", "^", "^^"]],
+  ["E", ["", "^"]],
+  ["F", ["v", ""]],
+  ["F#", ["v", "", "^", "^^"]],
+  ["G", [""]],
+  ["G#", ["v", "", "^", "^^"]],
+  ["A", [""]],
+  ["A#", ["v", "", "^", "^^"]],
+  ["B", ["", "^"]],
+]);
 
 let microStepPointer = 0;
 
@@ -151,7 +176,8 @@ export function make31EDO(
       4,
       // Number of microtones **traveled** to **land at** C from the A below,
       // for instance in 12edo this is 3: A-A#, A#-B, B-C, in 31edo we have 4 + 1 + 2 + 1 = 8
-      4 + 1 + 2 + 1 
+      4 + 1 + 2 + 1
     ),
+    noteNames
   };
 }
