@@ -17,6 +17,7 @@ export class CreateSurgeXTMappingError extends Error {
 export type SurgeXTMappingFiles = {
     scl: string;
     kbm: string;
+    noteNamesTxt?: string;
 };
 
 /**
@@ -61,6 +62,29 @@ export type KbmKeyboardMappingData = {
 };
 
 const MIDI_NOTE_COUNT = 128; // 0–127 inclusive
+
+function formatNoteNameFile(
+    noteNames: string[],
+    edo: number,
+    startingOctave: number,
+): string {
+    if (!noteNames.length) {
+        throw new CreateSurgeXTMappingError("noteNames must be a non-empty array when provided");
+    }
+
+    const lines: string[] = [];
+
+    for (let midiNote = 0; midiNote < MIDI_NOTE_COUNT; midiNote += 1) {
+        const octaveOffset = Math.floor(midiNote / edo);
+        const degreeIndex = midiNote % edo;
+        const noteName = noteNames[degreeIndex] ?? `Degree${degreeIndex}`;
+        const octaveLabel = startingOctave + octaveOffset;
+
+        lines.push(`${midiNote} ${noteName}${octaveLabel}`);
+    }
+
+    return lines.join("\n");
+}
 
 /** Create the in‑memory representation of an equal‑division‑of‑the‑octave scale. */
 export function createEdoSclData(edo: number, description: string): SclScaleData {
@@ -217,6 +241,8 @@ export function formatKbm(mapping: KbmKeyboardMappingData, fileNameComment = "ge
 /**
  * Creates an scl file usable in SurgeXT.
  * Creates a kbm file that can successfully map all the required notes.
+ * Optionally creates a Reaper note name text file when note names are provided
+ * in the manifest.
  * If the number of required notes is beyond what MIDI can handle (0–127),
  * then throws a `CreateSurgeXTMappingError`.
  *
@@ -239,6 +265,7 @@ export default function createSurgeXTMappingFiles(
     c4Frequency: number,
     startingOctave: number,
     octaveCount: number,
+    noteNames?: string[],
 ): SurgeXTMappingFiles {
     const requiredMappableNotes = octaveCount * edo;
 
@@ -271,6 +298,7 @@ export default function createSurgeXTMappingFiles(
 
     const scl = formatScl(sclData);
     const kbm = formatKbm(kbmData);
+    const noteNamesTxt = noteNames ? formatNoteNameFile(noteNames, edo, startingOctave) : undefined;
 
-    return { scl, kbm };
+    return { scl, kbm, noteNamesTxt };
 }

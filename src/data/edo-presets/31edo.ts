@@ -31,6 +31,7 @@ const noteNames = makeSuffixCycle([
   ["A", [""]],
   ["A#", ["v", "", "^", "^^"]],
   ["B", ["", "^"]],
+  ["C", ["v"]],
 ]);
 
 let microStepPointer = 0;

@@ -589,12 +589,21 @@ export default function Play() {
       manifest.totalEDO,
       manifest.C4Frequency,
       startingOctave,
-      octaveCount
+      octaveCount,
+      manifest.noteNames
     );
 
-    for (const [key, value] of Object.entries(mappingFiles)) {
-      const extension = key; // "scl" or "kbm"
-      const blob = new Blob([value], { type: "text/plain" });
+    const filesToDownload = [
+      { extension: "scl", contents: mappingFiles.scl },
+      { extension: "kbm", contents: mappingFiles.kbm },
+    ];
+
+    if (mappingFiles.noteNamesTxt) {
+      filesToDownload.push({ extension: "txt", contents: mappingFiles.noteNamesTxt });
+    }
+
+    for (const { extension, contents } of filesToDownload) {
+      const blob = new Blob([contents], { type: "text/plain" });
 
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
