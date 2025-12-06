@@ -17,22 +17,34 @@ import {
   defaultPurpleKeyAppearance,
 } from "../color-presets";
 import makeSuffixCycle from "@/utils/algorithms/makeSuffixCycle";
+import iota from "@/utils/algorithms/iota";
 
-const noteNames = makeSuffixCycle([
-  ["C", [""]],
-  ["C#", ["v", "", "^", "^^"]],
-  ["D", [""]],
-  ["D#", ["v", "", "^", "^^"]],
-  ["E", ["", "^"]],
-  ["F", ["v", ""]],
-  ["F#", ["v", "", "^", "^^"]],
-  ["G", [""]],
-  ["G#", ["v", "", "^", "^^"]],
-  ["A", [""]],
-  ["A#", ["v", "", "^", "^^"]],
-  ["B", ["", "^"]],
-  ["C", ["v"]],
+const noteNamesSharpwards = makeSuffixCycle([
+  ["C", ["", "t", "#", "#t", "x"]],
+  ["D", ["", "t", "#", "#t", "x"]],
+  ["E", ["", "t", "#"]],
+  ["F", ["", "t", "#", "#t", "x"]],
+  ["G", ["", "t", "#", "#t", "x"]],
+  ["A", ["", "t", "#", "#t", "x"]],
+  ["B", ["", "t", "#"]],
 ]);
+
+const noteNamesFlatwards = makeSuffixCycle([
+  ["C", ["", "d", "b"]],
+  ["B", ["", "d", "b", "db", "bb"]],
+  ["A", ["", "d", "b", "db", "bb"]],
+  ["G", ["", "d", "b", "db", "bb"]],
+  ["F", ["", "d", "b"]],
+  ["E", ["", "d", "b", "db", "bb"]],
+  ["D", ["", "d", "b", "db", "bb"]],
+]);
+
+const noteNames = iota(31).map((i) => {
+  const sharpwardsName = noteNamesSharpwards[i];
+  const flatwardsName = noteNamesFlatwards[i];
+  return `${sharpwardsName} | ${flatwardsName}`;
+})
+
 
 let microStepPointer = 0;
 
@@ -179,6 +191,6 @@ export function make31EDO(
       // for instance in 12edo this is 3: A-A#, A#-B, B-C, in 31edo we have 4 + 1 + 2 + 1 = 8
       4 + 1 + 2 + 1
     ),
-    noteNames
+    noteNames,
   };
 }
