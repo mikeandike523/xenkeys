@@ -41,7 +41,7 @@ const noteNamesFlatwards = makeSuffixCycle([
 
 const noteNames = iota(31).map((i) => {
   const sharpwardsName = noteNamesSharpwards[i];
-  const flatwardsName = noteNamesFlatwards[i];
+  const flatwardsName = noteNamesFlatwards[31-1-i];
   return `${sharpwardsName} | ${flatwardsName}`;
 })
 
