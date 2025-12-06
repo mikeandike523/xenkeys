@@ -30,13 +30,14 @@ const noteNamesSharpwards = makeSuffixCycle([
 ]);
 
 const noteNamesFlatwards = makeSuffixCycle([
-  ["C", ["", "d", "b"]],
+  ["C", ["d", "b"]],
   ["B", ["", "d", "b", "db", "bb"]],
   ["A", ["", "d", "b", "db", "bb"]],
   ["G", ["", "d", "b", "db", "bb"]],
   ["F", ["", "d", "b"]],
   ["E", ["", "d", "b", "db", "bb"]],
   ["D", ["", "d", "b", "db", "bb"]],
+  ["C",[""]]
 ]);
 
 const noteNames = iota(31).map((i) => {
@@ -44,6 +45,10 @@ const noteNames = iota(31).map((i) => {
   const flatwardsName = noteNamesFlatwards[31-1-i];
   return `${sharpwardsName} | ${flatwardsName}`;
 })
+
+for (const name of noteNames) {
+  console.log(name);
+}
 
 
 let microStepPointer = 0;
@@ -150,6 +155,7 @@ export function make31EDO(
   blackKeyHeight = blackToWhiteLengthRatio,
   purpleKeyHeight = purpleToBlackLengthRatio
 ): XenOctaveDisplayManifest {
+  console.log(noteNames.join("\n"));
   const keyClasses: Array<KeyClass> = [
     // White keys
     {
