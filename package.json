@@ -23,7 +23,7 @@
     "peerjs": "^1.5.5",
     "rc-slider": "^11.1.9",
     "react": "^19.2.3",
-    "react-dom": "^19.1.1",
+    "react-dom": "^19.2.3",
     "react-icons": "^5.5.0",
     "react-router-dom": "^7.9.4",
     "socket.io-client": "^4.8.1",
