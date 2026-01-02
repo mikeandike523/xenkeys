@@ -1,6 +1,5 @@
 import type XenOctaveDisplayManifest from "../../types/XenOctaveDisplayManifest";
 import type { KeyClass, KeyDeclaration } from "../../types/XenOctaveDisplayManifest";
-import getBaseFrequencyC from "../../utils/music-theory/getBaseFrequency";
 import { blackToWhiteWidthRatio, blackToWhiteLengthRatio } from "../piano-key-dimensions";
 import { defaultWhiteKeyAppearance, defaultBlackKeyAppearance } from "../color-presets";
 
@@ -112,6 +111,6 @@ export function make48EDO(
         keyClasses,
         keyDeclarations,
         totalEDO: 48,
-        C4Frequency: getBaseFrequencyC(440,48,4,12)
+        a4ToC5Microsteps: 12,
     }
 }

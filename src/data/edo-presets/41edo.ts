@@ -4,7 +4,6 @@ import type {
   KeyDeclaration,
 } from "../../types/XenOctaveDisplayManifest";
 
-import getBaseFrequencyC from "../../utils/music-theory/getBaseFrequency";
 import { blackToWhiteWidthRatio, blackToWhiteLengthRatio, purpleToBlackWidthRatio, purpleToBlackLengthRatio } from "../piano-key-dimensions";
 import { defaultWhiteKeyAppearance, defaultBlackKeyAppearance, defaultPurpleKeyAppearance } from "../color-presets";
 
@@ -145,12 +144,6 @@ export function make41EDO(
     keyClasses,
     keyDeclarations,
     totalEDO: 41,
-    C4Frequency: getBaseFrequencyC(
-      440,
-      41,
-      4,
-
-      6 + 1 + 2 + 1
-    ),
+    a4ToC5Microsteps: 6 + 1 + 2 + 1,
   };
 }

@@ -4,7 +4,6 @@ import type {
   KeyDeclaration,
 } from "../../types/XenOctaveDisplayManifest";
 
-import getBaseFrequencyC from "../../utils/music-theory/getBaseFrequency";
 import {
   blackToWhiteWidthRatio,
   blackToWhiteLengthRatio,
@@ -189,14 +188,9 @@ export function make31EDO(
     keyClasses,
     keyDeclarations,
     totalEDO: 31,
-    C4Frequency: getBaseFrequencyC(
-      440,
-      31,
-      4,
-      // Number of microtones **traveled** to **land at** C from the A below,
-      // for instance in 12edo this is 3: A-A#, A#-B, B-C, in 31edo we have 4 + 1 + 2 + 1 = 8
-      4 + 1 + 2 + 1
-    ),
+    // Number of microtones **traveled** to **land at** C from the A below,
+    // for instance in 12edo this is 3: A-A#, A#-B, B-C, in 31edo we have 4 + 1 + 2 + 1 = 8
+    a4ToC5Microsteps: 4 + 1 + 2 + 1,
     noteNames,
   };
 }

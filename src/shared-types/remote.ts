@@ -10,6 +10,7 @@ export type SettingsSyncPayload = {
   volumePct: number;             // 0..100
   startingOctave: number;        // oct start
   octaveCount: number;           // oct count
+  a4Frequency: number;           // reference A4 frequency (Hz)
 };
 
 

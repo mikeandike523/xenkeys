@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ChangeEvent,
@@ -49,7 +50,9 @@ import type {
   Waveform,
 } from "../shared-types/audio-engine";
 import type { SettingsSyncPayload } from "../shared-types/remote";
+import type { XenOctaveDisplayRuntimeManifest } from "../types/XenOctaveDisplayManifest";
 import createSurgeXTMappingFiles from "@/utils/music-theory/createSurgeXTMappingFiles";
+import getBaseFrequencyC from "../utils/music-theory/getBaseFrequency";
 
 const default12EdoManifest = make12EDO();
 const default19EdoManifest = make19EDO();
@@ -134,6 +137,8 @@ export default function Play() {
   const [playbackEnd, setPlaybackEnd] = useState<number | null>(null);
 
   const [volumePct, setVolumePct] = usePersistentState<number>("volume", 80);
+  const [a4Frequency, setA4Frequency, resetA4Frequency] =
+    usePersistentState<number>("a4Frequency", 440);
 
   // PeerJS P2P connection reference
   const peerRef = useRef<PeerConn | null>(null);
@@ -287,6 +292,10 @@ export default function Play() {
     usePersistentState<number>("octaveCount", 2);
 
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showA4Dialog, setShowA4Dialog] = useState(false);
+  const [a4FrequencyInput, setA4FrequencyInput] = useState(
+    a4Frequency.toString()
+  );
 
   const handleResetSettings = useCallback(() => {
     resetManifestName();
@@ -294,6 +303,7 @@ export default function Play() {
     resetEnvelope();
     resetStartingOctave();
     resetOctaveCount();
+    resetA4Frequency();
     setShowResetConfirm(false);
   }, [
     resetManifestName,
@@ -301,11 +311,25 @@ export default function Play() {
     resetEnvelope,
     resetStartingOctave,
     resetOctaveCount,
+    resetA4Frequency,
   ]);
 
-  const manifest = manifestPresets[manifestName];
-
-  console.log(manifest.noteNames)
+  const manifestPreset = manifestPresets[manifestName];
+  const manifest = useMemo<XenOctaveDisplayRuntimeManifest>(() => {
+    const C4Frequency = getBaseFrequencyC(
+      a4Frequency,
+      manifestPreset.totalEDO,
+      4,
+      manifestPreset.a4ToC5Microsteps
+    );
+    return {
+      ...manifestPreset,
+      C4Frequency,
+    };
+  }, [a4Frequency, manifestPreset]);
+  const parsedA4Frequency = Number(a4FrequencyInput);
+  const isA4FrequencyValid =
+    Number.isFinite(parsedA4Frequency) && parsedA4Frequency > 0;
 
   const playAreaSize = useElementSize(playAreaRef);
   const currentPlayAreaWidth = playAreaSize?.width || 0;
@@ -523,6 +547,7 @@ export default function Play() {
           setVolumePct(parsed.volumePct);
           setStartingOctave(parsed.startingOctave);
           setOctaveCount(parsed.octaveCount);
+          setA4Frequency(parsed.a4Frequency);
         } else if ((msg as NoteOnMsg).type === "noteOn") {
           const m = msg as NoteOnMsg;
           setRemotePressedIds((prev) =>
@@ -551,6 +576,7 @@ export default function Play() {
     setVolumePct,
     setStartingOctave,
     setOctaveCount,
+    setA4Frequency,
     onIdPress,
     onIdRelease,
   ]);
@@ -572,6 +598,7 @@ export default function Play() {
       volumePct,
       startingOctave,
       octaveCount,
+      a4Frequency,
     };
     peerConn.conn.send(payload);
   }, [
@@ -582,6 +609,7 @@ export default function Play() {
     volumePct,
     startingOctave,
     octaveCount,
+    a4Frequency,
   ]);
 
   const downloadSurgeXTMappingFiles = () => {
@@ -683,6 +711,18 @@ export default function Play() {
             </Option>
           ))}
         </Select>
+        <Div display="flex" alignItems="center" gap="0.5rem">
+          <Span color="white">A4: {a4Frequency.toFixed(2)} Hz</Span>
+          <Button
+            padding="0.25rem 0.5rem"
+            onClick={() => {
+              setA4FrequencyInput(a4Frequency.toString());
+              setShowA4Dialog(true);
+            }}
+          >
+            Change
+          </Button>
+        </Div>
 
         <Select
           value={waveform}
@@ -928,6 +968,52 @@ export default function Play() {
                 background="grey"
                 color="white"
                 padding="0.5rem 1rem"
+              >
+                Cancel
+              </Button>
+            </Div>
+          </Div>
+        </div>
+      )}
+      {/* --- A4 tuning modal --- */}
+      {showA4Dialog && (
+        <div className="audio-modal" role="dialog" aria-modal="true">
+          <Div
+            background="white"
+            padding="1.5rem"
+            borderRadius="0.5rem"
+            display="flex"
+            flexDirection="column"
+            gap="1rem"
+            alignItems="stretch"
+            minWidth="20rem"
+          >
+            <Span style={{ fontWeight: 700 }}>Reference Frequency (A4)</Span>
+            <label>
+              Frequency (Hz):
+              <input
+                type="number"
+                min={1}
+                step={0.01}
+                value={a4FrequencyInput}
+                onChange={(e) => setA4FrequencyInput(e.target.value)}
+                style={{ marginLeft: "0.5rem" }}
+              />
+            </label>
+            <Div display="flex" gap="0.5rem" justifyContent="flex-end">
+              <Button
+                onClick={() => {
+                  if (!isA4FrequencyValid) return;
+                  setA4Frequency(parsedA4Frequency);
+                  setShowA4Dialog(false);
+                }}
+                disabled={!isA4FrequencyValid}
+              >
+                OK
+              </Button>
+              <Button
+                background="#eee"
+                onClick={() => setShowA4Dialog(false)}
               >
                 Cancel
               </Button>

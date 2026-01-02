@@ -1,5 +1,5 @@
 import React, { forwardRef, useCallback, useEffect, useRef } from "react";
-import type XenOctaveDisplayManifest from "../types/XenOctaveDisplayManifest";
+import type { XenOctaveDisplayRuntimeManifest } from "../types/XenOctaveDisplayManifest";
 
 // -------------------------- Types -------------------------------------------
 interface PointerRec {
@@ -8,10 +8,11 @@ interface PointerRec {
   currentPitch?: number;
 }
 
-export interface CanvasKeyboardProps extends React.CanvasHTMLAttributes<HTMLCanvasElement> {
+export interface CanvasKeyboardProps
+  extends React.CanvasHTMLAttributes<HTMLCanvasElement> {
   width: number; // CSS pixels
   height: number; // CSS pixels
-  manifest: XenOctaveDisplayManifest;
+  manifest: XenOctaveDisplayRuntimeManifest;
   startingOctave: number;
   octaveCount: number;
   pressAnimationDuration?: number; // (kept for compatibility)
@@ -27,7 +28,7 @@ export interface CanvasKeyboardProps extends React.CanvasHTMLAttributes<HTMLCanv
 
 // ------------------------- Pitch helper (C4 + EDO) --------------------------
 function computePitchHz(
-  manifest: XenOctaveDisplayManifest,
+  manifest: XenOctaveDisplayRuntimeManifest,
   octaveNumber: number,
   inOctaveMicrotone: number
 ): number {
@@ -102,7 +103,7 @@ function normToPx(n: number, S: number) {
 
 // --------------------------- Layout builder ---------------------------------
 function buildLayoutCache(
-  manifest: XenOctaveDisplayManifest,
+  manifest: XenOctaveDisplayRuntimeManifest,
   startingOctave: number,
   octaveCount: number,
   aspect: number
