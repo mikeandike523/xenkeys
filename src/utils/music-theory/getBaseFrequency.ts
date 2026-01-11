@@ -17,12 +17,15 @@
  * to find the frequency of the desired octave number.
  * @param microtonesFromAtoC - The number of microtone steps to travel
  * from A4 to C5.
+ * @param tuneCIn12Edo - When true, tune C5 using 12-EDO (A4 to C5 is 3
+ * semitones) instead of the current EDO's microtone steps.
  */
 export default function getBaseFrequencyC(
   A4Frequency: number,
   totalEDO: number,
   octaveNumber: number,
-  microtonesFromAtoC: number
+  microtonesFromAtoC: number,
+  tuneCIn12Edo = false
 ): number {
   if (!Number.isFinite(A4Frequency) || A4Frequency <= 0) {
     throw new Error("A4Frequency must be a positive finite number.");
@@ -41,7 +44,9 @@ export default function getBaseFrequencyC(
   const stepRatio = Math.pow(2, 1 / totalEDO);
 
   // Move from A4 up to C5 by the specified number of steps
-  const c5 = A4Frequency * Math.pow(stepRatio, microtonesFromAtoC);
+  const c5 = tuneCIn12Edo
+    ? A4Frequency * Math.pow(2, 3 / 12)
+    : A4Frequency * Math.pow(stepRatio, microtonesFromAtoC);
 
   // Shift from C5 to the requested octave using powers of 2
   const octaveShift = Math.pow(2, octaveNumber - 5);

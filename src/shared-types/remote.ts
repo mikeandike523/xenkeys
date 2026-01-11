@@ -11,6 +11,7 @@ export type SettingsSyncPayload = {
   startingOctave: number;        // oct start
   octaveCount: number;           // oct count
   a4Frequency: number;           // reference A4 frequency (Hz)
+  tuneCIn12Edo: boolean;         // tune C using 12-EDO semitones
 };
 
 

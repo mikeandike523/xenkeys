@@ -139,6 +139,8 @@ export default function Play() {
   const [volumePct, setVolumePct] = usePersistentState<number>("volume", 80);
   const [a4Frequency, setA4Frequency, resetA4Frequency] =
     usePersistentState<number>("a4Frequency", 440);
+  const [tuneCIn12Edo, setTuneCIn12Edo, resetTuneCIn12Edo] =
+    usePersistentState<boolean>("tuneCIn12Edo", true);
 
   // PeerJS P2P connection reference
   const peerRef = useRef<PeerConn | null>(null);
@@ -304,6 +306,7 @@ export default function Play() {
     resetStartingOctave();
     resetOctaveCount();
     resetA4Frequency();
+    resetTuneCIn12Edo();
     setShowResetConfirm(false);
   }, [
     resetManifestName,
@@ -312,6 +315,7 @@ export default function Play() {
     resetStartingOctave,
     resetOctaveCount,
     resetA4Frequency,
+    resetTuneCIn12Edo,
   ]);
 
   const manifestPreset = manifestPresets[manifestName];
@@ -320,13 +324,14 @@ export default function Play() {
       a4Frequency,
       manifestPreset.totalEDO,
       4,
-      manifestPreset.a4ToC5Microsteps
+      manifestPreset.a4ToC5Microsteps,
+      tuneCIn12Edo
     );
     return {
       ...manifestPreset,
       C4Frequency,
     };
-  }, [a4Frequency, manifestPreset]);
+  }, [a4Frequency, manifestPreset, tuneCIn12Edo]);
   const parsedA4Frequency = Number(a4FrequencyInput);
   const isA4FrequencyValid =
     Number.isFinite(parsedA4Frequency) && parsedA4Frequency > 0;
@@ -548,6 +553,7 @@ export default function Play() {
           setStartingOctave(parsed.startingOctave);
           setOctaveCount(parsed.octaveCount);
           setA4Frequency(parsed.a4Frequency);
+          setTuneCIn12Edo(parsed.tuneCIn12Edo);
         } else if ((msg as NoteOnMsg).type === "noteOn") {
           const m = msg as NoteOnMsg;
           setRemotePressedIds((prev) =>
@@ -577,6 +583,7 @@ export default function Play() {
     setStartingOctave,
     setOctaveCount,
     setA4Frequency,
+    setTuneCIn12Edo,
     onIdPress,
     onIdRelease,
   ]);
@@ -599,6 +606,7 @@ export default function Play() {
       startingOctave,
       octaveCount,
       a4Frequency,
+      tuneCIn12Edo,
     };
     peerConn.conn.send(payload);
   }, [
@@ -610,6 +618,7 @@ export default function Play() {
     startingOctave,
     octaveCount,
     a4Frequency,
+    tuneCIn12Edo,
   ]);
 
   const downloadSurgeXTMappingFiles = () => {
@@ -722,6 +731,14 @@ export default function Play() {
           >
             Change
           </Button>
+          <label style={{ color: "white", display: "flex", gap: "0.25rem" }}>
+            <input
+              type="checkbox"
+              checked={tuneCIn12Edo}
+              onChange={(e) => setTuneCIn12Edo(e.target.checked)}
+            />
+            Tune C in 12edo
+          </label>
         </Div>
 
         <Select
