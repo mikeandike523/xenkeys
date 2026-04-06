@@ -55,19 +55,27 @@ const stepAppearances: HexTileAppearance[] = [
 // Bosanquet-Wilson layout for 31-EDO
 //
 // On the hex grid (flat-top hexagons, odd columns shifted down):
-//   Moving right        → +2 EDO steps  (chromatic semitone / apotome: C → C#)
-//   Moving up-right     → +5 EDO steps  (whole tone: C → D)
-//   Moving up-left      → +3 EDO steps  (diatonic semitone / limma: E → F, B → C)
+//   Moving right (SE direction) → +5 EDO steps  (whole tone: C → D)
+//   Moving up   (N  direction)  → +3 EDO steps  (diatonic semitone / limma: E → F, B → C)
+//   Moving NE                   → +8 EDO steps  (minor third)
+//   Moving NW                   → −2 EDO steps  (chromatic semitone down)
 //
-// The diatonic naturals sit in two vertical "bands":
-//   col=0: C (row 0), D (row 1), E (row 2)
-//   col=4: F (row 1), G (row 2), A (row 3), B (row 4)
-// with the next-octave C appearing at col=3, row=5.
+// The diatonic naturals form the classic Bosanquet staircase — horizontal runs
+// interrupted by a one-row step at each diatonic semitone (E→F and B→C):
+//   Row 0: C (col 0), D (col 1), E (col 2)        — three whites moving right
+//   Row 1: F (col 2), G (col 3), A (col 4), B (col 5) — four whites moving right
+//   Row 2: C'(col 5), D'(col 6), E'(col 7)
+//   Row 3: F'(col 7), G'(col 8), A'(col 9), B'(col 10)
+//   Row 4: C''(col 10), D''(col 11), E''(col 12)
+//   Row 5: F''(col 12), G''(col 13), A''(col 14), B''(col 15)
+//   Row 6: C'''(col 15) — top-right corner closes out 3 octaves
+//
+// 16 columns × 7 rows = 112 tiles covering ~3 octaves of diatonic content.
 // ---------------------------------------------------------------------------
 export const bosanquet31EdoLayout: HexKeyboardLayout = {
-  colStep: 2,   // EDO steps moving right   → chromatic semitone
-  rowStep: 5,   // EDO steps moving up      → whole tone
-  cols: 14,
+  colStep: 5,   // EDO steps moving right   → whole tone
+  rowStep: 3,   // EDO steps moving up      → diatonic semitone
+  cols: 16,
   rows: 7,
   stepAppearances,
 };
