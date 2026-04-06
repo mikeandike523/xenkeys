@@ -38,36 +38,34 @@ interface PointerRec {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Axial hex geometry (flat-top hexagons)
+// Axial hex geometry (pointy-top hexagons, q-axis horizontal)
 // ─────────────────────────────────────────────────────────────────────────────
 //
-// Uses axial (q, r) coordinates — the standard isomorphic hex grid system.
+// Uses axial (q, r) coordinates rotated +30° from the flat-top basis so that
+// the q-axis (whole-tone / white-key run) is perfectly horizontal on screen.
+// This fills the canvas efficiently and matches the classic Bosanquet diagram.
 //
 // Canvas position of tile (q, r):
-//   cx = originX + q * hexSize * 3/2
-//   cy = originY − q * hexHalfH − r * rowSpacing
+//   cx = originX + √3 · hexSize · (q + r/2)   ← q is purely horizontal
+//   cy = originY − 1.5 · hexSize · r           ← r goes up-and-right at 60°
 //
-// where originX/Y anchor (q=0,r=0) at bottom-left, and:
-//   hexHalfH  = hexSize * √3 / 2
-//   rowSpacing = hexSize * √3
-//
-// This produces a parallelogram grid — visually authentic for a Bosanquet
-// keyboard — with the bottom-left at the lowest pitch.
+// Grid bounding box (center-to-center):
+//   width  = √3 · hexSize · ((cols−1) + (rows−1)/2)
+//   height = 1.5 · hexSize · (rows−1)
 //
 // The 6 axial neighbor directions and their pitch intervals (for any tile):
 //
-//   Direction       Δ(q,r)     pixel offset         pitch Δ
-//   ──────────────────────────────────────────────────────────
-//   Right (NE-ish)  (+1, 0)    right + slightly up  +colStep
-//   Left  (SW-ish)  (−1, 0)    left  + slightly dn  −colStep
-//   Up    (N)       ( 0,+1)    straight up          +rowStep
-//   Down  (S)       ( 0,−1)    straight down        −rowStep
-//   SE              (+1,−1)    right + slightly dn  +colStep−rowStep
-//   NW              (−1,+1)    left  + slightly up  −colStep+rowStep
+//   Direction    Δ(q,r)    pixel offset          pitch Δ
+//   ────────────────────────────────────────────────────────
+//   Right        (+1, 0)   purely right          +colStep
+//   Left         (−1, 0)   purely left           −colStep
+//   Up-right     ( 0,+1)   up and right at 60°   +rowStep
+//   Down-left    ( 0,−1)   down and left at 60°  −rowStep
+//   Down-right   (+1,−1)   right + slightly dn   +colStep−rowStep
+//   Up-left      (−1,+1)   left  + slightly up   −colStep+rowStep
 //
 // For colStep=5, rowStep=3: neighbor intervals are ±5, ±3, ±2 from EVERY tile.
-// This gives true isomorphism: any chord shape sounds identical regardless of
-// starting position.
+// True isomorphism: any chord shape sounds identical regardless of position.
 
 const SQRT3 = Math.sqrt(3);
 const PADDING = 6;
@@ -76,15 +74,16 @@ const PADDING = 6;
 // Hex size computation
 // ─────────────────────────────────────────────────────────────────────────────
 
-// The parallelogram grid has:
-//   width  span = 2*hexSize + (cols−1)*hexSize*3/2
-//   height span = (cols−1)*hexHalfH + (rows−1)*rowSpacing + 2*hexHalfH
-//              = hexSize*√3*((cols+1)/2 + rows − 1)
+// Pointy-top hexagon grid (q-axis horizontal):
+//   total width  = √3 · hexSize · (cols + (rows−1)/2)
+//                  [center span + one hex-width of padding]
+//   total height = 1.5 · hexSize · (rows−1) + 2 · hexSize
+//                  [center span + one hex-height of padding]
 function computeHexSize(width: number, height: number, cols: number, rows: number): number {
-  const avW = Math.max(1, width - 2 * PADDING);
+  const avW = Math.max(1, width  - 2 * PADDING);
   const avH = Math.max(1, height - 2 * PADDING);
-  const fromW = avW / (2 + (cols - 1) * 1.5);
-  const fromH = avH / (SQRT3 * ((cols + 1) / 2 + rows - 1));
+  const fromW = avW / (SQRT3 * (cols + (rows - 1) / 2));
+  const fromH = avH / (1.5 * (rows - 1) + 2);
   return Math.max(1, Math.min(fromW, fromH));
 }
 
@@ -115,24 +114,27 @@ function buildTiles(
   refOctave: number,
   refStep: number,
   hexSize: number,
+  canvasWidth: number,
   canvasHeight: number,
 ): HexTile[] {
   const { colStep, rowStep, cols, rows } = layout;
   const { totalEDO } = manifest;
 
-  const hexHalfH  = hexSize * SQRT3 / 2;
-  const rowSpacing = hexSize * SQRT3;
-
-  // (q=0, r=0) anchors at bottom-left
-  const originX = PADDING + hexSize;
-  const originY = canvasHeight - PADDING - hexHalfH;
+  // Center the parallelogram in the canvas.
+  // Bounding box of tile centers:
+  //   x: [0,  √3·s·((cols−1) + (rows−1)/2)]
+  //   y: [−1.5·s·(rows−1), 0]
+  const xSpan = SQRT3 * hexSize * ((cols - 1) + (rows - 1) / 2);
+  const ySpan = 1.5 * hexSize * (rows - 1);
+  const originX = canvasWidth  / 2 - xSpan / 2;
+  const originY = canvasHeight / 2 + ySpan / 2;
 
   const tiles: HexTile[] = [];
 
   for (let q = 0; q < cols; q++) {
-    const cx = originX + q * hexSize * 1.5;
     for (let r = 0; r < rows; r++) {
-      const cy = originY - q * hexHalfH - r * rowSpacing;
+      const cx = originX + SQRT3 * hexSize * (q + r / 2);
+      const cy = originY - 1.5 * hexSize * r;
 
       const absoluteStep = refStep + q * colStep + r * rowStep;
       const octaveOffset  = Math.floor(absoluteStep / totalEDO);
@@ -153,15 +155,19 @@ function buildTiles(
 // Hit testing (flat-top hex containment)
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Point (px,py) inside flat-top regular hex centred at (cx,cy) with circumradius r:
-//   |dy| ≤ r√3/2   AND   |dx| ≤ r   AND   |dx|√3 + |dy| ≤ r√3
+// Point (px,py) inside pointy-top regular hex centred at (cx,cy) with circumradius r.
+// Strategy: rotate the test point by −30° into flat-top space, then apply the
+// standard flat-top test (|dy|≤r√3/2, |dx|≤r, |dx|√3+|dy|≤r√3).
 function hexContains(
   px: number, py: number,
   cx: number, cy: number,
   r: number
 ): boolean {
-  const dx = Math.abs(px - cx);
-  const dy = Math.abs(py - cy);
+  const dx0 = px - cx;
+  const dy0 = py - cy;
+  // Rotate −30°: cos(−30°)=√3/2, sin(−30°)=−1/2
+  const dx = Math.abs(dx0 * (SQRT3 / 2) + dy0 * 0.5);
+  const dy = Math.abs(-dx0 * 0.5     + dy0 * (SQRT3 / 2));
   return dy <= r * SQRT3 / 2 && dx <= r && dx * SQRT3 + dy <= r * SQRT3;
 }
 
@@ -193,7 +199,7 @@ function drawHex(
 ) {
   ctx.beginPath();
   for (let i = 0; i < 6; i++) {
-    const angle = (i * Math.PI) / 3;
+    const angle = (i * Math.PI) / 3 + Math.PI / 6;  // +30° → pointy-top
     const x = cx + r * Math.cos(angle);
     const y = cy + r * Math.sin(angle);
     if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
@@ -266,7 +272,7 @@ export default function CanvasHexKeyboard({
   const rebuildTiles = useCallback(() => {
     const hexSize = computeHexSize(width, height, layout.cols, layout.rows);
     hexSizeRef.current = hexSize;
-    tilesRef.current   = buildTiles(manifest, layout, refOctave, refStep, hexSize, height);
+    tilesRef.current   = buildTiles(manifest, layout, refOctave, refStep, hexSize, width, height);
   }, [width, height, manifest, layout, refOctave, refStep]);
 
   // ── Redraw ────────────────────────────────────────────────────────────────
