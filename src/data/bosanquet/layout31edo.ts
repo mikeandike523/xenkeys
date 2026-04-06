@@ -72,10 +72,16 @@ const stepAppearances: HexTileAppearance[] = [
 //
 // 16 columns × 7 rows = 112 tiles covering ~3 octaves of diatonic content.
 // ---------------------------------------------------------------------------
-export const bosanquet31EdoLayout: HexKeyboardLayout = {
-  colStep: 5,   // EDO steps moving right   → whole tone
-  rowStep: 3,   // EDO steps moving up      → diatonic semitone
-  cols: 16,
-  rows: 7,
-  stepAppearances,
-};
+// One octave in this layout travels 5 q-steps and 2 r-steps:
+//   5×colStep + 2×rowStep = 5×5 + 2×3 = 31 = totalEDO
+// So for N octaves: cols = 5N+1, rows = 2N+1
+// This places C at (0,0) bottom-left and C+N octaves at (5N, 2N) top-right.
+export function make31EdoBosanquetLayout(octaves: number): HexKeyboardLayout {
+  return {
+    colStep: 5,
+    rowStep: 3,
+    cols: 5 * octaves + 1,
+    rows: 2 * octaves + 1,
+    stepAppearances,
+  };
+}

@@ -30,7 +30,7 @@ import CanvasHexKeyboard from "../components/CanvasHexKeyboard";
 import { NumberStepper } from "../components/NumberStepper";
 import VolumeSlider from "../components/VolumeSlider";
 import { make31EDO } from "../data/edo-presets/31edo";
-import { bosanquet31EdoLayout } from "../data/bosanquet/layout31edo";
+import { make31EdoBosanquetLayout } from "../data/bosanquet/layout31edo";
 import {
   createReceiverPeer,
   createSenderPeer,
@@ -218,6 +218,8 @@ export default function PlayBosanquet() {
 
   const [startingOctave, setStartingOctave, resetStartingOctave] =
     usePersistentState<number>("startingOctave", 4);
+  const [octaveCount, setOctaveCount, resetOctaveCount] =
+    usePersistentState<number>("bosanquet_octaveCount", 3);
 
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showA4Dialog, setShowA4Dialog] = useState(false);
@@ -227,10 +229,16 @@ export default function PlayBosanquet() {
     resetWaveform();
     resetEnvelope();
     resetStartingOctave();
+    resetOctaveCount();
     resetA4Frequency();
     resetTuneCIn12Edo();
     setShowResetConfirm(false);
-  }, [resetWaveform, resetEnvelope, resetStartingOctave, resetA4Frequency, resetTuneCIn12Edo]);
+  }, [resetWaveform, resetEnvelope, resetStartingOctave, resetOctaveCount, resetA4Frequency, resetTuneCIn12Edo]);
+
+  const layout = useMemo(
+    () => make31EdoBosanquetLayout(Math.max(1, Math.min(6, octaveCount))),
+    [octaveCount]
+  );
 
   const manifest = useMemo<XenOctaveDisplayRuntimeManifest>(() => {
     const C4Frequency = getBaseFrequencyC(
@@ -432,7 +440,7 @@ export default function PlayBosanquet() {
       envelope,
       volumePct,
       startingOctave,
-      octaveCount: 1,
+      octaveCount,
       a4Frequency,
       tuneCIn12Edo,
     };
@@ -559,6 +567,7 @@ export default function PlayBosanquet() {
         </label>
 
         <NumberStepper label="Oct Start:" value={startingOctave} onChange={setStartingOctave} min={0} />
+        <NumberStepper label="Octaves:" value={octaveCount} onChange={setOctaveCount} min={1} max={6} />
 
         {/* Recording controls */}
         <Div display="flex" gap="0.5rem" marginLeft="auto" alignItems="center">
@@ -618,7 +627,7 @@ export default function PlayBosanquet() {
         {currentPlayAreaHeight > 0 && currentPlayAreaWidth > 0 && (
           <CanvasHexKeyboard
             manifest={manifest}
-            layout={bosanquet31EdoLayout}
+            layout={layout}
             refOctave={startingOctave}
             refStep={0}
             onIdPress={onIdPress}
