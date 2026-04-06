@@ -13,11 +13,11 @@ export interface HexTileAppearance {
 }
 
 export interface HexKeyboardLayout {
-  colStep: number;                    // EDO steps per column (moving right)
-  rowStep: number;                    // EDO steps per row (moving up)
-  cols: number;
-  rows: number;
-  stepAppearances: HexTileAppearance[]; // length must equal manifest.totalEDO
+  colStep: number;                      // EDO steps per axial q (moving right)
+  rowStep: number;                      // EDO steps per axial r (moving up)
+  cols: number;                         // axial q: 0 .. cols-1
+  rows: number;                         // axial r: 0 .. rows-1
+  stepAppearances: HexTileAppearance[]; // length == manifest.totalEDO
 }
 
 export interface CanvasHexKeyboardProps {
@@ -25,8 +25,8 @@ export interface CanvasHexKeyboardProps {
   height: number;
   manifest: XenOctaveDisplayRuntimeManifest;
   layout: HexKeyboardLayout;
-  refOctave: number;  // octave of the note at grid position (0, 0)
-  refStep: number;    // in-octave step of the note at grid position (0, 0)
+  refOctave: number;  // octave of the note at axial position (q=0, r=0)
+  refStep: number;    // in-octave step at (q=0, r=0)
   onIdPress: (pitchId: number, pitch: number) => void;
   onIdRelease: (pitchId: number) => void;
   externalPressedIds?: number[];
@@ -38,27 +38,53 @@ interface PointerRec {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Geometry constants
+// Axial hex geometry (flat-top hexagons)
 // ─────────────────────────────────────────────────────────────────────────────
+//
+// Uses axial (q, r) coordinates — the standard isomorphic hex grid system.
+//
+// Canvas position of tile (q, r):
+//   cx = originX + q * hexSize * 3/2
+//   cy = originY − q * hexHalfH − r * rowSpacing
+//
+// where originX/Y anchor (q=0,r=0) at bottom-left, and:
+//   hexHalfH  = hexSize * √3 / 2
+//   rowSpacing = hexSize * √3
+//
+// This produces a parallelogram grid — visually authentic for a Bosanquet
+// keyboard — with the bottom-left at the lowest pitch.
+//
+// The 6 axial neighbor directions and their pitch intervals (for any tile):
+//
+//   Direction       Δ(q,r)     pixel offset         pitch Δ
+//   ──────────────────────────────────────────────────────────
+//   Right (NE-ish)  (+1, 0)    right + slightly up  +colStep
+//   Left  (SW-ish)  (−1, 0)    left  + slightly dn  −colStep
+//   Up    (N)       ( 0,+1)    straight up          +rowStep
+//   Down  (S)       ( 0,−1)    straight down        −rowStep
+//   SE              (+1,−1)    right + slightly dn  +colStep−rowStep
+//   NW              (−1,+1)    left  + slightly up  −colStep+rowStep
+//
+// For colStep=5, rowStep=3: neighbor intervals are ±5, ±3, ±2 from EVERY tile.
+// This gives true isomorphism: any chord shape sounds identical regardless of
+// starting position.
 
 const SQRT3 = Math.sqrt(3);
-const PADDING = 6; // px around the grid
+const PADDING = 6;
 
-// Flat-top hexagon layout:
-//   colSpacing = hexSize * 1.5
-//   rowSpacing = hexSize * SQRT3
-//   Odd columns are shifted DOWN by rowSpacing/2 ("even-q offset")
-//
-// Center of tile (col, row) where row=0 is BOTTOM, row increases UPWARD:
-//   cx = PADDING + hexSize + col * colSpacing
-//   cy = PADDING + hexHalfH + (rows - 1 - row) * rowSpacing
-//        + (col % 2 === 1 ? rowSpacing / 2 : 0)
+// ─────────────────────────────────────────────────────────────────────────────
+// Hex size computation
+// ─────────────────────────────────────────────────────────────────────────────
 
+// The parallelogram grid has:
+//   width  span = 2*hexSize + (cols−1)*hexSize*3/2
+//   height span = (cols−1)*hexHalfH + (rows−1)*rowSpacing + 2*hexHalfH
+//              = hexSize*√3*((cols+1)/2 + rows − 1)
 function computeHexSize(width: number, height: number, cols: number, rows: number): number {
   const avW = Math.max(1, width - 2 * PADDING);
   const avH = Math.max(1, height - 2 * PADDING);
-  const fromW = avW / (2 + 1.5 * (cols - 1));
-  const fromH = avH / (SQRT3 * (rows + 0.5));
+  const fromW = avW / (2 + (cols - 1) * 1.5);
+  const fromH = avH / (SQRT3 * ((cols + 1) / 2 + rows - 1));
   return Math.max(1, Math.min(fromW, fromH));
 }
 
@@ -89,27 +115,29 @@ function buildTiles(
   refOctave: number,
   refStep: number,
   hexSize: number,
+  canvasHeight: number,
 ): HexTile[] {
   const { colStep, rowStep, cols, rows } = layout;
   const { totalEDO } = manifest;
 
-  const colSpacing = hexSize * 1.5;
+  const hexHalfH  = hexSize * SQRT3 / 2;
   const rowSpacing = hexSize * SQRT3;
-  const hexHalfH = rowSpacing / 2;
+
+  // (q=0, r=0) anchors at bottom-left
+  const originX = PADDING + hexSize;
+  const originY = canvasHeight - PADDING - hexHalfH;
 
   const tiles: HexTile[] = [];
 
-  for (let col = 0; col < cols; col++) {
-    const cx = PADDING + hexSize + col * colSpacing;
-    const stagger = col % 2 === 1 ? hexHalfH : 0;
+  for (let q = 0; q < cols; q++) {
+    const cx = originX + q * hexSize * 1.5;
+    for (let r = 0; r < rows; r++) {
+      const cy = originY - q * hexHalfH - r * rowSpacing;
 
-    for (let row = 0; row < rows; row++) {
-      const cy = PADDING + hexHalfH + (rows - 1 - row) * rowSpacing + stagger;
-
-      const absoluteStep = refStep + col * colStep + row * rowStep;
-      const octaveOffset = Math.floor(absoluteStep / totalEDO);
-      const inOctaveStep = ((absoluteStep % totalEDO) + totalEDO) % totalEDO;
-      const octave = refOctave + octaveOffset;
+      const absoluteStep = refStep + q * colStep + r * rowStep;
+      const octaveOffset  = Math.floor(absoluteStep / totalEDO);
+      const inOctaveStep  = ((absoluteStep % totalEDO) + totalEDO) % totalEDO;
+      const octave        = refOctave + octaveOffset;
 
       const pitchId = octave * totalEDO + inOctaveStep;
       const pitchHz = computePitchHz(manifest, octave, inOctaveStep);
@@ -122,12 +150,16 @@ function buildTiles(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Hit testing
+// Hit testing (flat-top hex containment)
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Containment test for a flat-top regular hexagon centered at (cx, cy)
-// with circumradius r.
-function hexContains(px: number, py: number, cx: number, cy: number, r: number): boolean {
+// Point (px,py) inside flat-top regular hex centred at (cx,cy) with circumradius r:
+//   |dy| ≤ r√3/2   AND   |dx| ≤ r   AND   |dx|√3 + |dy| ≤ r√3
+function hexContains(
+  px: number, py: number,
+  cx: number, cy: number,
+  r: number
+): boolean {
   const dx = Math.abs(px - cx);
   const dy = Math.abs(py - cy);
   return dy <= r * SQRT3 / 2 && dx <= r && dx * SQRT3 + dy <= r * SQRT3;
@@ -143,7 +175,6 @@ function hitTest(
   const rect = canvas.getBoundingClientRect();
   const px = clientX - rect.left;
   const py = clientY - rect.top;
-  // Use 97% of hexSize to leave a tiny gap between tiles for precise edge behavior
   const r = hexSize * 0.97;
   for (const tile of tiles) {
     if (hexContains(px, py, tile.cx, tile.cy, r)) return tile;
@@ -157,19 +188,15 @@ function hitTest(
 
 function drawHex(
   ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  r: number,
-  fill: string,
-  outlineColor: string,
+  cx: number, cy: number, r: number,
+  fill: string, outlineColor: string,
 ) {
   ctx.beginPath();
   for (let i = 0; i < 6; i++) {
     const angle = (i * Math.PI) / 3;
     const x = cx + r * Math.cos(angle);
     const y = cy + r * Math.sin(angle);
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
   }
   ctx.closePath();
   ctx.fillStyle = fill;
@@ -201,7 +228,6 @@ function drawScene(
 
     if (hexSize >= 18 && noteNames) {
       const rawName = noteNames[tile.inOctaveStep] ?? "";
-      // Display the sharpwards name only (before " | ")
       const label = rawName.split(" | ")[0];
       ctx.font = `${fontSize}px sans-serif`;
       ctx.textAlign = "center";
@@ -229,18 +255,18 @@ export default function CanvasHexKeyboard({
   onIdRelease,
   externalPressedIds,
 }: CanvasHexKeyboardProps) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const tilesRef = useRef<HexTile[]>([]);
-  const hexSizeRef = useRef<number>(1);
-  const pressedKeys = useRef<Set<number>>(new Set());
+  const canvasRef     = useRef<HTMLCanvasElement | null>(null);
+  const tilesRef      = useRef<HexTile[]>([]);
+  const hexSizeRef    = useRef<number>(1);
+  const pressedKeys   = useRef<Set<number>>(new Set());
   const activePointers = useRef<Map<number, PointerRec>>(new Map());
 
-  // ── Rebuild tile grid ─────────────────────────────────────────────────────
+  // ── Rebuild ───────────────────────────────────────────────────────────────
 
   const rebuildTiles = useCallback(() => {
     const hexSize = computeHexSize(width, height, layout.cols, layout.rows);
     hexSizeRef.current = hexSize;
-    tilesRef.current = buildTiles(manifest, layout, refOctave, refStep, hexSize);
+    tilesRef.current   = buildTiles(manifest, layout, refOctave, refStep, hexSize, height);
   }, [width, height, manifest, layout, refOctave, refStep]);
 
   // ── Redraw ────────────────────────────────────────────────────────────────
@@ -252,19 +278,17 @@ export default function CanvasHexKeyboard({
     if (!ctx) return;
 
     const allPressed = new Set<number>(pressedKeys.current);
-    if (externalPressedIds) {
-      for (const id of externalPressedIds) allPressed.add(id);
-    }
+    if (externalPressedIds) for (const id of externalPressedIds) allPressed.add(id);
 
     drawScene(ctx, tilesRef.current, hexSizeRef.current, layout, manifest.noteNames, allPressed);
   }, [layout, manifest.noteNames, externalPressedIds]);
 
-  // ── Canvas size + rebuild on dimension/manifest/layout change ─────────────
+  // ── Canvas size sync ──────────────────────────────────────────────────────
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    canvas.width = Math.max(1, Math.floor(width));
+    canvas.width  = Math.max(1, Math.floor(width));
     canvas.height = Math.max(1, Math.floor(height));
     rebuildTiles();
     redraw();
@@ -275,9 +299,7 @@ export default function CanvasHexKeyboard({
     redraw();
   }, [rebuildTiles, redraw]);
 
-  useEffect(() => {
-    redraw();
-  }, [externalPressedIds, redraw]);
+  useEffect(() => { redraw(); }, [externalPressedIds, redraw]);
 
   // ── Gesture / touch prevention ────────────────────────────────────────────
 
@@ -286,21 +308,21 @@ export default function CanvasHexKeyboard({
     if (!el) return;
     const prevent = (e: Event) => e.preventDefault();
     const opts: AddEventListenerOptions = { passive: false };
-    el.addEventListener("gesturestart", prevent as EventListener, opts);
+    el.addEventListener("gesturestart",  prevent as EventListener, opts);
     el.addEventListener("gesturechange", prevent as EventListener, opts);
-    el.addEventListener("gestureend", prevent as EventListener, opts);
-    el.addEventListener("touchstart", prevent, opts);
-    el.addEventListener("touchmove", prevent, opts);
-    el.addEventListener("touchend", prevent, opts);
-    el.addEventListener("contextmenu", prevent as EventListener);
+    el.addEventListener("gestureend",    prevent as EventListener, opts);
+    el.addEventListener("touchstart",    prevent, opts);
+    el.addEventListener("touchmove",     prevent, opts);
+    el.addEventListener("touchend",      prevent, opts);
+    el.addEventListener("contextmenu",   prevent as EventListener);
     return () => {
-      el.removeEventListener("gesturestart", prevent as EventListener, opts);
+      el.removeEventListener("gesturestart",  prevent as EventListener, opts);
       el.removeEventListener("gesturechange", prevent as EventListener, opts);
-      el.removeEventListener("gestureend", prevent as EventListener, opts);
-      el.removeEventListener("touchstart", prevent as EventListener, opts);
-      el.removeEventListener("touchmove", prevent as EventListener, opts);
-      el.removeEventListener("touchend", prevent as EventListener, opts);
-      el.removeEventListener("contextmenu", prevent as EventListener);
+      el.removeEventListener("gestureend",    prevent as EventListener, opts);
+      el.removeEventListener("touchstart",    prevent as EventListener, opts);
+      el.removeEventListener("touchmove",     prevent as EventListener, opts);
+      el.removeEventListener("touchend",      prevent as EventListener, opts);
+      el.removeEventListener("contextmenu",   prevent as EventListener);
     };
   }, []);
 
@@ -318,12 +340,12 @@ export default function CanvasHexKeyboard({
       activePointers.current.clear();
       redraw();
     };
+    const onVis = () => { if (document.visibilityState !== "visible") endAll(); };
     window.addEventListener("blur", endAll);
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState !== "visible") endAll();
-    });
+    document.addEventListener("visibilitychange", onVis);
     return () => {
       window.removeEventListener("blur", endAll);
+      document.removeEventListener("visibilitychange", onVis);
     };
   }, [onIdRelease, redraw]);
 
@@ -342,10 +364,7 @@ export default function CanvasHexKeyboard({
       onIdPress(tile.pitchId, tile.pitchHz);
       redraw();
     }
-    activePointers.current.set(e.pointerId, {
-      captureEl: canvas,
-      currentPitchId: tile?.pitchId,
-    });
+    activePointers.current.set(e.pointerId, { captureEl: canvas, currentPitchId: tile?.pitchId });
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -355,7 +374,7 @@ export default function CanvasHexKeyboard({
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const tile = hitTest(e.clientX, e.clientY, canvas, tilesRef.current, hexSizeRef.current);
+    const tile  = hitTest(e.clientX, e.clientY, canvas, tilesRef.current, hexSizeRef.current);
     const newId = tile?.pitchId;
 
     if (newId === rec.currentPitchId) return;
