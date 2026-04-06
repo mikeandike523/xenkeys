@@ -7,6 +7,7 @@ import "./App.css";
 // ✅ Lazy load each page
 const PageHome = lazy(() => import("./pages/Home"));
 const PagePlay = lazy(() => import("./pages/Play"));
+const PagePlayBosanquet = lazy(() => import("./pages/PlayBosanquet"));
 const PageCompose = lazy(() => import("./pages/Compose"));
 
 export default function App() {
@@ -16,6 +17,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<PageHome />} />
         <Route path="/play" element={<PagePlay />} />
+        <Route path="/play/bosanquet" element={<PagePlayBosanquet />} />
         <Route path="/compose" element={<PageCompose />} />
       </Routes>
     </Suspense>

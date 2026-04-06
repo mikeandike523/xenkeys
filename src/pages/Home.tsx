@@ -59,12 +59,27 @@ export default function Home() {
     >
       <Div
         display="grid"
-        gridTemplateColumns="auto auto"
+        gridTemplateColumns="auto auto auto"
         width="auto"
         columnGap="16px"
       >
         <TileLink href="/play" title="Play">
           <Img cssWidth="min(100dvw, 300px)" cssHeight="auto" src="/piano.png" />
+        </TileLink>
+
+        <TileLink href="/play/bosanquet" title="Bosanquet">
+          <Div
+            width="min(100%, 300px)"
+            height="auto"
+            aspectRatio={1.4}
+            border="2px dashed black"
+            display="flex"
+            alignItems="center"
+            justifyContent="center"
+            fontSize="14px"
+          >
+            31-EDO Hex Keyboard
+          </Div>
         </TileLink>
 
         <TileLink href="/compose" title="Compose">

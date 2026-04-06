@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:terpstrakeyboard.com)",
+      "WebFetch(domain:en.xen.wiki)",
+      "WebFetch(domain:en.wikipedia.org)",
+      "WebFetch(domain:forum.sensel.com)",
+      "WebFetch(domain:www.huygens-fokker.org)",
+      "Bash(npx tsc:*)",
+      "Bash(./node_modules/.bin/tsc --noEmit)",
+      "Bash(node_modules/.bin/tsc.cmd --noEmit)",
+      "Bash(node node_modules/typescript/bin/tsc --noEmit)",
+      "Bash(npm run:*)",
+      "Bash(pnpm exec:*)",
+      "Bash(pnpm run:*)",
+      "Bash(pnpm install:*)"
+    ]
+  }
+}
