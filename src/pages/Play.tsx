@@ -51,7 +51,7 @@ import type {
 } from "../shared-types/audio-engine";
 import type { SettingsSyncPayload } from "../shared-types/remote";
 import type { XenOctaveDisplayRuntimeManifest } from "../types/XenOctaveDisplayManifest";
-import createSurgeXTMappingFiles from "@/utils/music-theory/createSurgeXTMappingFiles";
+import createSurgeXTMappingFiles, { toAsciiNoteNames } from "@/utils/music-theory/createSurgeXTMappingFiles";
 import getBaseFrequencyC from "../utils/music-theory/getBaseFrequency";
 
 const default12EdoManifest = make12EDO();
@@ -621,13 +621,17 @@ export default function Play() {
     tuneCIn12Edo,
   ]);
 
-  const downloadSurgeXTMappingFiles = () => {
+  const downloadSurgeXTMappingFiles = (asciiOnly = false) => {
+    const noteNames = asciiOnly && manifest.noteNames
+      ? toAsciiNoteNames(manifest.noteNames)
+      : manifest.noteNames;
+
     const mappingFiles = createSurgeXTMappingFiles(
       manifest.totalEDO,
       manifest.C4Frequency,
       startingOctave,
       octaveCount,
-      manifest.noteNames
+      noteNames
     );
 
     const filesToDownload = [
@@ -917,8 +921,11 @@ export default function Play() {
             Download
           </A>
         </Div>
-        <Button onClick={downloadSurgeXTMappingFiles}>
+        <Button onClick={() => downloadSurgeXTMappingFiles(false)}>
           Download SurgeXT Mapping Files
+        </Button>
+        <Button onClick={() => downloadSurgeXTMappingFiles(true)}>
+          Download Mapping Files (ASCII only)
         </Button>
       </Header>
 

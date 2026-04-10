@@ -10,6 +10,7 @@ export interface HexTileAppearance {
   pressed: string;
   outline: string;
   labelColor: string;
+  labelColorSecondary: string;
 }
 
 export interface HexKeyboardLayout {
@@ -234,12 +235,29 @@ function drawScene(
 
     if (hexSize >= 18 && noteNames) {
       const rawName = noteNames[tile.inOctaveStep] ?? "";
-      const label = rawName.split(" | ")[0];
-      ctx.font = `${fontSize}px sans-serif`;
+      const parts = rawName.split(" | ");
+      const sharpName = parts[0] ?? "";
+      const flatName  = parts[1] ?? sharpName;
+      const twoLine   = sharpName !== flatName;
+
+      const fs = twoLine
+        ? Math.max(6, Math.min(11, hexSize * 0.22))
+        : fontSize;
+
+      ctx.font      = `${fs}px sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillStyle = app.labelColor;
-      ctx.fillText(label, tile.cx, tile.cy);
+
+      if (twoLine) {
+        const offset = fs * 0.7;
+        ctx.fillStyle = app.labelColor;
+        ctx.fillText(sharpName, tile.cx, tile.cy - offset);
+        ctx.fillStyle = app.labelColorSecondary;
+        ctx.fillText(flatName,  tile.cx, tile.cy + offset);
+      } else {
+        ctx.fillStyle = app.labelColor;
+        ctx.fillText(sharpName, tile.cx, tile.cy);
+      }
     }
   }
 

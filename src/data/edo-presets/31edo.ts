@@ -18,25 +18,31 @@ import {
 import makeSuffixCycle from "@/utils/algorithms/makeSuffixCycle";
 import iota from "@/utils/algorithms/iota";
 
+// UTF-8 accidental symbols:
+//   𝄲 (U+1D132) half sharp    𝄳 (U+1D133) half flat
+//   ♯ (U+266F)  sharp          ♭ (U+266D)  flat
+//   𝄶 (U+1D136) sesquisharp   𝄷 (U+1D137) sesquiflat
+//   𝄪 (U+1D12A) double sharp  𝄫 (U+1D12B) double flat
+
 const noteNamesSharpwards = makeSuffixCycle([
-  ["C", ["", "t", "#", "#t", "x"]],
-  ["D", ["", "t", "#", "#t", "x"]],
-  ["E", ["", "t", "#"]],
-  ["F", ["", "t", "#", "#t", "x"]],
-  ["G", ["", "t", "#", "#t", "x"]],
-  ["A", ["", "t", "#", "#t", "x"]],
-  ["B", ["", "t", "#"]],
+  ["C", ["", "𝄲", "♯", "𝄶", "𝄪"]],
+  ["D", ["", "𝄲", "♯", "𝄶", "𝄪"]],
+  ["E", ["", "𝄲", "♯"]],
+  ["F", ["", "𝄲", "♯", "𝄶", "𝄪"]],
+  ["G", ["", "𝄲", "♯", "𝄶", "𝄪"]],
+  ["A", ["", "𝄲", "♯", "𝄶", "𝄪"]],
+  ["B", ["", "𝄲", "♯"]],
 ]);
 
 const noteNamesFlatwards = makeSuffixCycle([
-  ["C", ["d", "b"]],
-  ["B", ["", "d", "b", "db", "bb"]],
-  ["A", ["", "d", "b", "db", "bb"]],
-  ["G", ["", "d", "b", "db", "bb"]],
-  ["F", ["", "d", "b"]],
-  ["E", ["", "d", "b", "db", "bb"]],
-  ["D", ["", "d", "b", "db", "bb"]],
-  ["C",[""]]
+  ["C", ["𝄳", "♭"]],
+  ["B", ["", "𝄳", "♭", "𝄷", "𝄫"]],
+  ["A", ["", "𝄳", "♭", "𝄷", "𝄫"]],
+  ["G", ["", "𝄳", "♭", "𝄷", "𝄫"]],
+  ["F", ["", "𝄳", "♭"]],
+  ["E", ["", "𝄳", "♭", "𝄷", "𝄫"]],
+  ["D", ["", "𝄳", "♭", "𝄷", "𝄫"]],
+  ["C", [""]],
 ]);
 
 const noteNames = iota(31).map((i) => {

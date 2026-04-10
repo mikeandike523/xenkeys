@@ -10,11 +10,11 @@ import type { HexTileAppearance, HexKeyboardLayout } from "../../components/Canv
 //   Chromatic flats  (-2):         steps 3, 8, 16, 21, 26
 //   Diesis down (-1 from natural): steps 4, 9, 12, 17, 22, 27, 30
 
-const NATURAL: HexTileAppearance    = { base: "#ffffff", pressed: "#bbbbbb", outline: "#888888", labelColor: "#222222" };
-const DIESIS_UP: HexTileAppearance  = { base: "#bb77ee", pressed: "#9955cc", outline: "#772299", labelColor: "#ffffff" };
-const SHARP: HexTileAppearance      = { base: "#333333", pressed: "#555555", outline: "#111111", labelColor: "#ffffff" };
-const FLAT: HexTileAppearance       = { base: "#224499", pressed: "#3355bb", outline: "#112266", labelColor: "#ffffff" };
-const DIESIS_DN: HexTileAppearance  = { base: "#117766", pressed: "#229988", outline: "#005544", labelColor: "#ffffff" };
+const NATURAL: HexTileAppearance    = { base: "#ffffff", pressed: "#bbbbbb", outline: "#888888", labelColor: "#222222", labelColorSecondary: "#888888" };
+const DIESIS_UP: HexTileAppearance  = { base: "#bb77ee", pressed: "#9955cc", outline: "#772299", labelColor: "#ffffff", labelColorSecondary: "rgba(255,255,255,0.55)" };
+const SHARP: HexTileAppearance      = { base: "#333333", pressed: "#555555", outline: "#111111", labelColor: "#ffffff", labelColorSecondary: "rgba(255,255,255,0.55)" };
+const FLAT: HexTileAppearance       = { base: "#224499", pressed: "#3355bb", outline: "#112266", labelColor: "#ffffff", labelColorSecondary: "rgba(255,255,255,0.55)" };
+const DIESIS_DN: HexTileAppearance  = { base: "#117766", pressed: "#229988", outline: "#005544", labelColor: "#ffffff", labelColorSecondary: "rgba(255,255,255,0.55)" };
 
 // One entry per 31-EDO step (index = inOctaveStep)
 const stepAppearances: HexTileAppearance[] = [

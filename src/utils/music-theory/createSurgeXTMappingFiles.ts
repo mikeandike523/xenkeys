@@ -63,6 +63,23 @@ export type KbmKeyboardMappingData = {
 
 const MIDI_NOTE_COUNT = 128; // 0–127 inclusive
 
+/** Replace UTF-8 musical accidentals with ASCII equivalents. */
+export function toAsciiNoteNames(noteNames: string[]): string[] {
+    return noteNames.map((name) =>
+        name
+            // Musical Symbols block (SMP)
+            .replace(/𝄪/g, "x")   // U+1D12A double sharp
+            .replace(/𝄫/g, "bb")  // U+1D12B double flat
+            .replace(/𝄲/g, "t")   // U+1D132 half sharp
+            .replace(/𝄳/g, "d")   // U+1D133 half flat
+            .replace(/𝄶/g, "#t")  // U+1D136 sesquisharp
+            .replace(/𝄷/g, "db")  // U+1D137 sesquiflat
+            // BMP music signs
+            .replace(/♯/g, "#")   // U+266F sharp
+            .replace(/♭/g, "b"),  // U+266D flat
+    );
+}
+
 function formatNoteNameFile(
     noteNames: string[],
     edo: number,
