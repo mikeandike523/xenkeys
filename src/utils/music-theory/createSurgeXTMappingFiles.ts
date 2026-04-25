@@ -235,7 +235,10 @@ export function formatKbm(mapping: KbmKeyboardMappingData, fileNameComment = "ge
     lines.push("! First MIDI note number to retune:");
     lines.push(`${mapping.firstMidiNote}`);
     lines.push("! Last MIDI note number to retune:");
-    lines.push(`${mapping.lastMidiNote}`);
+    // lines.push(`${mapping.lastMidiNote}`);
+    // No need to restrict by octave count
+    // map until last midi is more convenient
+    lines.push("127")
     lines.push("! Middle note where scale degree 0 is mapped to:");
     lines.push(`${mapping.middleNote}`);
     lines.push("! Reference note for which frequency is given:");
